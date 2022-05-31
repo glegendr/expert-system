@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use colored::Colorize;
 
-const RESERVED_WORDS: [&'static str; 16] = [
+const RESERVED_WORDS: [&'static str; 19] = [
     "and",
     "&",
     "or",
@@ -17,10 +17,13 @@ const RESERVED_WORDS: [&'static str; 16] = [
     "!",
     "then",
     "=>",
+    "if-and-only-if",
     "<=>",
     "if",
     "def",
-    "?"
+    "?",
+    "(",
+    ")"
 ];
 
 #[derive(Debug)]
@@ -138,12 +141,16 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<String, Variable>) -> R
             1 => {
                 if RESERVED_WORDS.contains(&chunk.as_str()) {
                     Err(format!("{chunk} is a reserved word"))?
+                } else if let Some((k, _)) = variables.iter().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk) {
+                    Err(format!("{chunk} is already an alias for {k}"))?
                 }
                 var.alias_true = Some(String::from(chunk))
             },
             2 => {
                 if RESERVED_WORDS.contains(&chunk.as_str()) {
                     Err(format!("{chunk} is a reserved word"))?
+                } else if let Some((k, _)) = variables.iter().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk) {
+                    Err(format!("{chunk} is already an alias for {k}"))?
                 }
                 var.alias_false = Some(String::from(chunk))
             },
@@ -189,6 +196,125 @@ fn user_set(chunks: &Vec<String>, variables: &mut HashMap<String, Variable>) -> 
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+enum Operator {
+    And,
+    Or,
+    Xor,
+    Equal,
+    Not,
+    Then,
+    IfAndOnlyIf,
+    Parentesis(bool),
+    Var(String)
+}
+
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Operator::IfAndOnlyIf => write!(f, "If-and-only-if"),
+            Operator::Parentesis(true) => write!(f, "("),
+            Operator::Parentesis(false) => write!(f, ")"),
+            Operator::Var(s) => write!(f, "{s}"),
+            _ => write!(f, "{}", format!("{self:?}")),
+        }
+    }
+}
+
+impl Operator {
+    pub fn from_str(string: &str) -> Option<Operator> {
+        match string {
+            "and" | "&" => Some(Operator::And),
+            "or" | "|" => Some(Operator::Or),
+            "xor" | "^" => Some(Operator::Xor),
+            "equal" | "=" => Some(Operator::Equal),
+            "not" | "!" => Some(Operator::Not),
+            "then" | "=>" => Some(Operator::Then),
+            "if-and-only-if" | "<=>" => Some(Operator::IfAndOnlyIf),
+            "(" => Some(Operator::Parentesis(true)),
+            ")" => Some(Operator::Parentesis(false)),
+            _ => None
+        }
+    }
+
+    pub fn to_reverse_polish_notation(input: &Vec<Operator>) -> Result<Vec<Operator>, String> {
+        let mut output: Vec<Operator> = Vec::new();
+        let mut stack: Vec<Operator> = Vec::new();
+        for operator in input.iter() {
+            match operator {
+                Operator::Var(_) => output.push(operator.clone()),
+                Operator::Parentesis(false) => {
+                    loop {
+                        match stack.pop() {
+                            Some(Operator::Parentesis(true)) => break,
+                            Some(ope) => output.push(ope),
+                            None => Err("unexpected closing delimiter: ')'")?
+                        }
+                    }
+                },
+                _ => {
+                    if output.len() == 0 {
+                        Err(format!("unexpected operator {operator}"))?
+                    }
+                    match operator {
+                        Operator::IfAndOnlyIf | Operator::Then => {
+                            loop {
+                                match stack.pop() {
+                                    Some(Operator::Parentesis(true)) => Err("unclosed delimiter '('")?,
+                                    Some(ope) => output.push(ope),
+                                    None => break
+                                }
+                            }
+                            stack.push(operator.clone());
+                        },
+                        _ => stack.push(operator.clone())
+                    }
+                }
+            }
+        }
+        loop {
+            match stack.pop() {
+                Some(Operator::Parentesis(true)) => Err("unclosed delimiter '('")?,
+                Some(ope) => output.push(ope),
+                None => break
+            }
+        }
+        Ok(output)
+    }
+}
+
+
+fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<String, Variable>, rules: &mut HashSet<String>) -> Result<(), String> {
+    let mut aritmetic: Vec<Operator> = Vec::new();
+    let mut chunk_iter = chunks.iter();
+    chunk_iter.next();
+    for chunk in chunk_iter {
+        if let Some(operator) = Operator::from_str(chunk) {
+            aritmetic.push(operator);
+        } else if let Some(_) = variables.get(chunk) {
+            aritmetic.push(Operator::Var(String::from(chunk)));
+        } else if let Some((k, _)) = variables.iter().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk) {
+            aritmetic.push(Operator::Var(String::from(k)));
+        } else if let Some((k, _)) = variables.iter().find(|(_, v)| v.alias_false.clone().unwrap_or_default() == *chunk) {
+            aritmetic.push(Operator::Not);
+            aritmetic.push(Operator::Var(String::from(k)));
+        } else if chunk.len() == 1 {
+            match chunk.chars().next().unwrap() {
+                'a'..='z' | 'A'..='Z' => {
+                    variables.insert(chunk.clone(), Variable::default());
+                    aritmetic.push(Operator::Var(String::from(chunk)));
+                },
+                _ => Err(format!("{chunk} is not a valid variable name"))?
+            }
+        } else {
+            Err(format!("{chunk} is unexpected in rule line"))?
+        }
+    }
+    println!("{:?}", Operator::to_reverse_polish_notation(&aritmetic)?);
+    //TODO to push in rules
+    Ok(())
+}
+
 fn fill_maps(variables: &mut HashMap<String, Variable>, rules: &mut HashSet<String>, file: &str) -> Result<(), String> {
     let lines = to_splited_string(file)?;
     for line in lines {
@@ -197,48 +323,12 @@ fn fill_maps(variables: &mut HashMap<String, Variable>, rules: &mut HashSet<Stri
         if let Some(first) = chunks.iter().next() {
             match first.as_str() {
                 "def" => def_var(&chunks, variables)?,
-                "if" => {},
+                "if" => def_rules(&chunks, variables, rules)?,
                 "=" => user_set(&chunks, variables)?,
                 "?" => {},
                 _ => {}
             }
         }
-        // match line.chars().next() {
-        //     Some('?') => {
-        //         let mut line_iter = line.chars();
-        //         line_iter.next();
-        //         for var in line_iter {
-        //             match var {
-        //                 'A'..='Z' | 'a'..='z' => {
-        //                     if let Some(variable) = variables.get_mut(&var.to_string()) {
-        //                         variable.requested = true;
-        //                     } else {
-        //                         drop(variables.insert(var.to_string(), Variable::request()));
-        //                     }
-        //                 },
-        //                 _ => Err(format!("'{var}' is an invalid variable"))?
-        //             }
-        //         }
-        //     },
-        //     Some('=') => {
-        //         let mut line_iter = line.chars();
-        //         line_iter.next();
-        //         for var in line_iter {
-        //             match var {
-        //                 'A'..='Z' | 'a'..='z' => {
-        //                     if let Some(variable) = variables.get_mut(&var.to_string()) {
-        //                         variable.value = true;
-        //                         variable.locked = true;
-        //                     } else {
-        //                         drop(variables.insert(var.to_string(), Variable::insert()));
-        //                     }
-        //                 },
-        //                 _ => Err(format!("'{var}' is an invalid variable"))?
-        //             }
-        //         }
-        //     },
-        //     _ => ()
-        // }
     }
     Ok(())
 
