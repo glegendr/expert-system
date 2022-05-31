@@ -19,7 +19,6 @@ if "It croaks and eats flies" and "It chirps and sings" then "It's a Monster"   
 if "It's a Frog" or "It's a Monster" then "It's colored green"                     # F | M => G
 if "It's a Canary" then "It's colored yellow"
 # values setted to true
-=A
 ="It croaks and eats flies"
 # values to request
 ? "It's colored green""It's colored yellow"
