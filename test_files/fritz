@@ -15,9 +15,9 @@ C => Y
 # TODO RULES
 if "It croaks and eats flies" and "It don't chirps nor sings" then "It's a Frog"   # A + !B => F
 if "It chirps and sings" and "It don't croaks nor eats flies" then "It's a Canary" # B + !A => C
-if "It croaks and eats flies" and "It chirps and sings" then "It's a Monster"      # A + B => M
-if "It's a Frog" or "It's a Monster" then "It's colored green"                     # F | M => G
-if "It's a Canary" then "It's colored yellow"
+if "It croaks and eats flies" and "It chirps and sings" then "It's a Monster"      # A + B  => M
+if "It's a Frog" or "It's a Monster" then "It's colored green"                     # F | M  => G
+if "It's a Canary" then "It's colored yellow"                                      # C      => Y
 # values setted to true
 ="It croaks and eats flies"
 # values to request
