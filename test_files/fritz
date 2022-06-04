@@ -6,12 +6,12 @@ def C "It's a Canary"
 def M "It's a Monster"
 def G "It's colored green"
 def Y "It's colored yellow"
-# define rules
-A + !B => F
-B + !A => C
-A + B => M
-F | M => G
-C => Y
+# # define rules
+# A + !B => F
+# B + !A => C
+# A + B => M
+# F | M => G
+# C => Y
 # TODO RULES
 if "It croaks and eats flies" and "It don't chirps nor sings" then "It's a Frog"   # A + !B => F
 if "It chirps and sings" and "It don't croaks nor eats flies" then "It's a Canary" # B + !A => C

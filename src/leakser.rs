@@ -1,5 +1,5 @@
 use std::env::args;
-use crate::parsing::string_to_char;
+use crate::utils::string_to_char;
 
 enum Flag {
     Help
@@ -13,7 +13,6 @@ impl Flag {
         })
     }
 }
-
 
 pub fn print_helper(error: &str) -> Result<(), String> {
     println!("cargo run --release -- [maps] [flags]");

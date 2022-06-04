@@ -1,8 +1,10 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashMap;
-use std::fmt;
-use colored::Colorize;
+use crate::{
+    models::{Operator, Variable, Rule, BTree},
+    utils::string_to_char,
+};
 
 const RESERVED_WORDS: [&'static str; 20] = [
     "and",
@@ -27,85 +29,9 @@ const RESERVED_WORDS: [&'static str; 20] = [
     ")"
 ];
 
-// #[derive(Debug)]
-pub struct Rule {
-    // input: fn(&HashMap<char, (Variable, Vec<Rule>)>) -> bool,
-    // output: BTree, // A <=> B  [A, {...A}, {input A, output B}] [B, {...B}, {input B, output A}]
-    formula_string: String
-}
+/* ---------- STRUCTS ---------- */
 
-
-impl fmt::Display for Rule {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // let mut ret = String::new();
-        // for ope in &self.input {
-        //     ret = format!("{ret}{}", ope.to_code_string());
-        // }
-        // ret = format!("{ret} {} ", if self.bidirectional {Operator::IfAndOnlyIf.to_code_string()} else {Operator::Then.to_code_string()});
-        // for ope in &self.output {
-        //     ret = format!("{ret}{}", ope.to_code_string());
-        // }
-        write!(f, "{}", self.formula_string)
-    }
-}
-
-// #[derive(Debug)]
-pub struct Variable {
-    pub value: bool,
-    pub locked: bool,
-    pub requested: bool,
-    pub alias_true: Option<String>,
-    pub alias_false: Option<String>,
-    pub rules: Vec<Rule>
-}
-
-impl fmt::Display for Variable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        
-        let is_ok = |v| if v {
-            "✓".green()
-        } else {
-            "x".red()
-        };
-        write!(f, "{}|{}|{}|{}|{}", is_ok(self.value), is_ok(self.locked), is_ok(self.requested), self.alias_true.clone().unwrap_or_default(), self.alias_false.clone().unwrap_or_default())
-    }
-}
-
-impl Variable {
-    pub fn default() -> Self {
-        Variable {
-            value: false,
-            locked: false,
-            requested: false,
-            alias_true: None,
-            alias_false: None,
-            rules: Vec::default()
-        }
-    }
-
-    pub fn request() -> Self {
-        Variable {
-            value: false,
-            locked: false,
-            requested: true,
-            alias_true: None,
-            alias_false: None,
-            rules: Vec::default()
-        }
-    }
-
-    pub fn insert() -> Self {
-        Variable {
-            value: true,
-            locked: true,
-            requested: false,
-            alias_true: None,
-            alias_false: None,
-            rules: Vec::default()
-        }
-    }
-}
-
+/* ---------- STRING TRANSFORMATIONS ---------- */
 fn to_splited_string(file: &str) -> Result<Vec<String>, String> {
     let mut file = File::open(file).map_err(|e| format!("{e}"))?;
     let mut contents = String::new();
@@ -149,6 +75,7 @@ fn line_to_chunk(line: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
+/* ---------- FILLING VARIABLES ---------- */
 fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>  ) -> Result<(), String> {
     if chunks.len() == 1 {
         Err(String::from("def line expect variable"))?
@@ -197,7 +124,7 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>  ) -> R
 
 fn user_set(chunks: &Vec<String>, variables: &mut HashMap<char, Variable> ) -> Result<(), String> {
     for chunk in chunks.iter() {
-        if let Some(var) = variables.get_mut(&string_to_char(chunk)) {
+        if let Some((_, var)) = variables.iter_mut().find(|(_, v)| v.alias_true == Some(String::from(chunk))) {
             var.value = true;
             var.locked = true;
         } else {
@@ -216,113 +143,6 @@ fn user_set(chunks: &Vec<String>, variables: &mut HashMap<char, Variable> ) -> R
 
     }
     Ok(())
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Operator {
-    And,
-    Or,
-    Xor,
-    Equal,
-    Not,
-    Then,
-    IfAndOnlyIf,
-    Parentesis(bool),
-    Var(char)
-}
-
-impl fmt::Display for Operator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Operator::IfAndOnlyIf => write!(f, "If-and-only-if"),
-            Operator::Parentesis(true) => write!(f, "("),
-            Operator::Parentesis(false) => write!(f, ")"),
-            Operator::Var(s) => write!(f, "{s}"),
-            _ => write!(f, "{}", format!("{self:?}")),
-        }
-    }
-}
-
-impl Operator {
-    pub fn from_str(string: &str) -> Option<Operator> {
-        match string {
-            "and" | "&" | "+" => Some(Operator::And),
-            "or" | "|" => Some(Operator::Or),
-            "xor" | "^" => Some(Operator::Xor),
-            "equal" | "=" => Some(Operator::Equal),
-            "not" | "!" => Some(Operator::Not),
-            "then" | "=>" => Some(Operator::Then),
-            "if-and-only-if" | "<=>" => Some(Operator::IfAndOnlyIf),
-            "(" => Some(Operator::Parentesis(true)),
-            ")" => Some(Operator::Parentesis(false)),
-            _ => None
-        }
-    }
-
-    pub fn to_code_string(&self) -> String {
-        match self {
-            Operator::And => String::from("&"),
-            Operator::Or => String::from("|"),
-            Operator::Xor => String::from("^"),
-            Operator::Equal => String::from("="),
-            Operator::Not => String::from("!"),
-            Operator::Then => String::from("=>"),
-            Operator::IfAndOnlyIf => String::from("<=>"),
-            Operator::Parentesis(true) => String::from("("),
-            Operator::Parentesis(false) => String::from(")"),
-            Operator::Var(s) => s.to_string(),
-        }
-    }
-
-    pub fn to_reverse_polish_notation(input: &Vec<Operator>) -> Result<Vec<Operator>, String> {
-        let mut output: Vec<Operator> = Vec::new();
-        let mut stack: Vec<Operator> = Vec::new();
-        for operator in input.iter() {
-            match operator {
-                Operator::Var(_) => output.push(operator.clone()),
-                Operator::Parentesis(false) => {
-                    loop {
-                        match stack.pop() {
-                            Some(Operator::Parentesis(true)) => break,
-                            Some(ope) => output.push(ope),
-                            None => Err("unexpected closing delimiter: ')'")?
-                        }
-                    }
-                },
-                _ => {
-                    if output.len() == 0 {
-                        Err(format!("unexpected operator {operator}"))?
-                    }
-                    match operator {
-                        Operator::IfAndOnlyIf | Operator::Then => {
-                            loop {
-                                match stack.pop() {
-                                    Some(Operator::Parentesis(true)) => Err("unclosed delimiter '('")?,
-                                    Some(ope) => output.push(ope),
-                                    None => break
-                                }
-                            }
-                            stack.push(operator.clone());
-                        },
-                        _ => stack.push(operator.clone())
-                    }
-                }
-            }
-        }
-        loop {
-            match stack.pop() {
-                Some(Operator::Parentesis(true)) => Err("unclosed delimiter '('")?,
-                Some(ope) => output.push(ope),
-                None => break
-            }
-        }
-        Ok(output)
-    }
-}
-
-
-pub fn string_to_char(string: &str) -> char {
-    string.chars().next().unwrap_or('/')
 }
 
 fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Result<(), String> {
@@ -356,18 +176,40 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> R
         2 => (),
         _ => Err("expected only 1 => or <=> operator")?
     }
-    // let _ = rules.insert(Rule {
-    //     input: Operator::to_reverse_polish_notation(splited.get(0).unwrap_or(&Vec::new()))?,
-    //     output: Operator::to_reverse_polish_notation(splited.get(1).unwrap_or(&Vec::new()))?,
-    //     bidirectional: aritmetic.iter().find(|ope| *ope == &Operator::IfAndOnlyIf || *ope == &Operator::Then) == Some(&Operator::IfAndOnlyIf)
-    // });
-    //TODO to push in rules
+    let mut rule = Rule {
+        input: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(0).unwrap_or(&Vec::new()))?)?,
+        output: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(1).unwrap_or(&Vec::new()))?)?,
+        formula_string: String::from("")
+    };
+    rule.formula_string = format!("{} => {}", rule.input, rule.output);
+    for var in rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
+        if let Operator::Var(v) = var {
+            if let Some(var) = variables.get_mut(&v) {
+                var.rules.push(rule.clone());
+            }
+        }
+    }
+    if let Some(Operator::IfAndOnlyIf) = aritmetic.iter().find(|ope| *ope == &Operator::IfAndOnlyIf) {
+        let mut rule_2 = Rule {
+            input: rule.output.clone(),
+            output: rule.input.clone(),
+            formula_string: String::from("")
+        };
+        rule_2.formula_string = format!("{} => {}", rule_2.input, rule_2.output);
+        for var in rule_2.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
+            if let Operator::Var(v) = var {
+                if let Some(var) = variables.get_mut(&v) {
+                    var.rules.push(rule_2.clone());
+                }
+            }
+        }
+    }
     Ok(())
 }
 
 fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Result<(), String> {
     for chunk in chunks.iter() {
-        if let Some(var) = variables.get_mut(&string_to_char(chunk)) {
+        if let Some((_, var)) = variables.iter_mut().find(|(_, v)| v.alias_true == Some(String::from(chunk))) {
             var.requested = true;
         } else {
             for c in chunk.chars() {
@@ -378,7 +220,7 @@ fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Re
                 } else {
                     match c {
                         'A'..='Z' | 'a'..='z' => variables.insert(c, Variable::request()),
-                        _ => Err(format!("{chunk} is not a valid variable name"))?,
+                        _ => Err(format!("{c} is not a valid variable name"))?,
                     };
                 }
             }
@@ -391,15 +233,25 @@ fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Re
 pub fn fill_maps(variables: &mut HashMap<char, Variable>, file: &str) -> Result<(), String> {
     let lines = to_splited_string(file)?;
     for line in lines {
-        let chunks = line_to_chunk(&line)?;
+        let mut chunks = line_to_chunk(&line)?;
         if let Some(first) = chunks.iter().next() {
             match (first.as_str(), string_to_char(first)){
                 ("def", _) => def_var(&chunks[1..].to_vec(), variables)?,
                 ("if", _) => def_rules(&chunks[1..].to_vec(), variables)?,
                 ("=", _) => user_set(&chunks[1..].to_vec(), variables)?,
-                (_, '=') => user_set(&chunks, variables)?,
+                (_, '=') => {
+                    if let Some(first) = chunks.get_mut(0) {
+                        first.remove(0);
+                    }
+                    user_set(&chunks, variables)?
+                },
                 ("?", _) => requests(&chunks[1..].to_vec(), variables)?,
-                (_, '?') => requests(&chunks, variables)?,
+                (_, '?') => {
+                    if let Some(first) = chunks.get_mut(0) {
+                        first.remove(0);
+                    }
+                    requests(&chunks, variables)?
+                },
                 _ => def_rules(&chunks, variables)?
             }
         }
