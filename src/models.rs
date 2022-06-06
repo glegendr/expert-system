@@ -1,5 +1,5 @@
 use std::fmt;
-use colored::Colorize;
+use crate::utils::tick_or_cross;
 
 /* ---------- RULE ---------- */
 #[derive(Debug, Clone)]
@@ -28,13 +28,15 @@ pub struct Variable {
 
 impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        
-        let is_ok = |v| if v {
-            "✓".green()
-        } else {
-            "x".red()
-        };
-        write!(f, "{}|{}|{}|{}|{}", is_ok(self.value), is_ok(self.locked), is_ok(self.requested), self.alias_true.clone().unwrap_or_default(), self.alias_false.clone().unwrap_or_default())
+        write!(
+            f,
+            "[{}] [{}] [{}] [{}] [{}]",
+            tick_or_cross(self.value),
+            tick_or_cross(self.locked),
+            tick_or_cross(self.requested),
+            self.alias_true.as_ref().unwrap_or(&String::default()),
+            self.alias_false.as_ref().unwrap_or(&String::default())
+        )
     }
 }
 

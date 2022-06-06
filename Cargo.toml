@@ -8,3 +8,4 @@ authors = ["Gaspard Legendre <glegendr@student.42.fr>", "Lorenzo Jesu <lojesu@st
 
 [dependencies]
 colored = "2.0.0"
+rustyline = "9.1.2"

@@ -97,7 +97,7 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>  ) -> R
             1 => {
                 if RESERVED_WORDS.contains(&chunk.as_str()) {
                     Err(format!("{chunk} is a reserved word"))?
-                } else if let Some((k, _)) = variables.iter().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk) {
+                } else if let Some((k, _)) = variables.iter().find(|(k, v)| k.to_string() != var_name && (v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk)) {
                     Err(format!("{chunk} is already an alias for {k}"))?
                 }
                 var.alias_true = Some(String::from(chunk))
@@ -105,7 +105,7 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>  ) -> R
             2 => {
                 if RESERVED_WORDS.contains(&chunk.as_str()) {
                     Err(format!("{chunk} is a reserved word"))?
-                } else if let Some((k, _)) = variables.iter().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk) {
+                } else if let Some((k, _)) = variables.iter().find(|(k, v)| k.to_string() != var_name && (v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk)) {
                     Err(format!("{chunk} is already an alias for {k}"))?
                 }
                 var.alias_false = Some(String::from(chunk))
@@ -230,31 +230,42 @@ fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Re
     Ok(())
 }
 
+pub fn parse_line(variables: &mut HashMap<char, Variable>, line: String, restricted: bool) -> Result<(), String> {
+    let mut chunks = line_to_chunk(&line)?;
+    if let Some(first) = chunks.iter().next() {
+        match (first.as_str(), string_to_char(first)){
+            ("def", _) => def_var(&chunks[1..].to_vec(), variables)?,
+            ("if", _) => def_rules(&chunks[1..].to_vec(), variables)?,
+            ("=", _) => user_set(&chunks[1..].to_vec(), variables)?,
+            (_, '=') => {
+                if let Some(first) = chunks.get_mut(0) {
+                    first.remove(0);
+                }
+                user_set(&chunks, variables)?
+            },
+            ("?", _) => requests(&chunks[1..].to_vec(), variables)?,
+            (_, '?') => {
+                if let Some(first) = chunks.get_mut(0) {
+                    first.remove(0);
+                }
+                requests(&chunks, variables)?
+            },
+            _ => {
+                if restricted {
+                    Err(format!("Expected one of [=, ?, def, if] found {line}"))?
+                } else {
+                    def_rules(&chunks, variables)?
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn fill_maps(variables: &mut HashMap<char, Variable>, file: &str) -> Result<(), String> {
     let lines = to_splited_string(file)?;
     for line in lines {
-        let mut chunks = line_to_chunk(&line)?;
-        if let Some(first) = chunks.iter().next() {
-            match (first.as_str(), string_to_char(first)){
-                ("def", _) => def_var(&chunks[1..].to_vec(), variables)?,
-                ("if", _) => def_rules(&chunks[1..].to_vec(), variables)?,
-                ("=", _) => user_set(&chunks[1..].to_vec(), variables)?,
-                (_, '=') => {
-                    if let Some(first) = chunks.get_mut(0) {
-                        first.remove(0);
-                    }
-                    user_set(&chunks, variables)?
-                },
-                ("?", _) => requests(&chunks[1..].to_vec(), variables)?,
-                (_, '?') => {
-                    if let Some(first) = chunks.get_mut(0) {
-                        first.remove(0);
-                    }
-                    requests(&chunks, variables)?
-                },
-                _ => def_rules(&chunks, variables)?
-            }
-        }
+       parse_line(variables, line, false)?;
     }
     Ok(())
 }
