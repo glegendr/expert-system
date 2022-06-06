@@ -1,8 +1,10 @@
 use std::fmt;
 use crate::utils::tick_or_cross;
+use colored::Colorize;
+use std::collections::HashMap;
 
 /* ---------- RULE ---------- */
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rule {
     pub input: BTree,
     pub output: BTree,
@@ -186,7 +188,7 @@ impl Operator {
 
 /* ---------- BTREE ---------- */
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BTree {
     pub c1: Option<Box<BTree>>,
     pub c2: Option<Box<BTree>>,
@@ -293,6 +295,29 @@ impl BTree {
         }
 
         ret
+    }
+
+    pub fn enrich(&self, variables: &HashMap<char, Variable>) -> BTree {
+        match &self.node {
+            Operator::Var(c) => {
+                if let Some(var) = variables.get(c) {
+                    BTree::new(Operator::B(var.value))    
+                } else {
+                    BTree::new(Operator::B(false))
+                }
+            },
+            Operator::B(c) => BTree::new(Operator::B(*c)),
+            _ => {
+                let mut ret = BTree::new(self.node.clone());
+                if let Some(c1) = &self.c1 {
+                    ret.c1 = Some(Box::new(c1.enrich(variables)));
+                }
+                if let Some(c2) = &self.c2 {
+                    ret.c2 = Some(Box::new(c2.enrich(variables)));
+                }
+                ret
+            }
+        }
     }
 }
 
