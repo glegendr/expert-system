@@ -7,13 +7,12 @@ mod utils;
 use std::collections::HashMap;
 use parsing::{fill_maps, parse_line};
 use models::Variable;
-use algo::algo_v1;
+use algo::{algo_v1, search_query};
 use leakser::{leaks, Flag};
 use utils::{print_variables, print_rules, tick_or_cross, print_variable};
-use std::io;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-use colored::{Colorize, ColoredString};
+use colored::Colorize;
 
 fn main() -> Result<(), String> {
     let (files, flags) = leaks()?;
@@ -24,13 +23,13 @@ fn main() -> Result<(), String> {
             let mut variables: HashMap<char, Variable> = HashMap::new();
             fill_maps(&mut variables, file)?;
             print_variables(&variables);
-            algo_v1();
+            algo_v1(&mut variables);
         }
     }
     Ok(())
 }
 
-fn interactive_mode(files: &Vec<String>, flags: &Vec<Flag>) {
+fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
     let mut variables: HashMap<char, Variable> = HashMap::new();
     for file in files {
         if let Err(e) = fill_maps(&mut variables, file) {
@@ -65,10 +64,10 @@ fn interactive_mode(files: &Vec<String>, flags: &Vec<Flag>) {
                         status = tick_or_cross(true);
                     },
                     "exec" | "run" | "execute" => {
-                        algo_v1();
+                        algo_v1(&mut variables);
                         status = tick_or_cross(true);
                     },
-                    s => {
+                    _ => {
                         if let Some(variable) = variables.iter().find(|(k, v)| k.to_string() == line.clone() || v.alias_false == Some(line.clone()) || v.alias_true == Some(line.clone())) {
                             print_variable(variable);  
                             status = tick_or_cross(true);  
@@ -76,6 +75,24 @@ fn interactive_mode(files: &Vec<String>, flags: &Vec<Flag>) {
                             let chunks: Vec<&str> = line.split(" ").filter(|c| c.len() > 0).collect();
                             if let Some(key_word) = chunks.get(0) {
                                 match key_word.to_lowercase().trim() {
+                                    "exec" | "run" | "execute" => {
+                                        if let Some(var) = chunks.get(1) {
+                                            let var_name = match variables.iter().find(|(k, v)| k.to_string() == var.clone() || v.alias_false == Some(String::from(*var)) || v.alias_true == Some(String::from(*var))) {
+                                                Some((k, _)) => *k,
+                                                None => {
+                                                    println!("{var} do not exist");
+                                                    status = tick_or_cross(false);
+                                                    continue
+                                                }
+                                            };
+                                            match search_query(var_name, &mut variables, &mut Vec::new()) {
+                                                Ok(res) => println!("{var_name} is {res}"),
+                                                Err(e) => println!("{e}")
+                                            }
+                                            status = tick_or_cross(true);
+                                            continue
+                                        }
+                                    },
                                     "file" => {
                                         if let Some(file) = chunks.get(1) {
                                             if let Err(e) = fill_maps(&mut variables, file) {
@@ -91,7 +108,7 @@ fn interactive_mode(files: &Vec<String>, flags: &Vec<Flag>) {
                                         }
                                         continue
                                     }
-                                    "remove" => {
+                                    "remove" | "del" | "delete" => {
                                         if let Some(kind) = chunks.get(1) {
                                             match kind.to_lowercase().trim() {
                                                 "rule" | "rules" => status = tick_or_cross(remove_rule(chunks.get(2), &mut variables)),
@@ -149,16 +166,16 @@ fn remove_rule(nb_s: Option<&&str>, variables: &mut HashMap<char, Variable>) -> 
     match nb_s {
         Some(nb_s) => {
             match nb_s.parse::<usize>() {
-                Ok(mut nb) => {
+                Ok(nb) => {
                     if nb <= 0 || nb > rules_len(variables) {
                         println!("expected a number between 1 and {}", rules_len(variables));
                         return false
                     }
                     let mut i = 0;
-                    for (k, var) in variables.iter_mut() {
+                    for (_, var) in variables.iter_mut() {
                         let index = nb - 1 - i;
                         if (index == 0 || index < var.rules.len()) && var.rules.len() > 0 {
-                            println!("- {}", format!("{}", var.rules.get(index).unwrap()).red());
+                            println!("{}", format!("- {}", var.rules.get(index).unwrap()).red());
                             var.rules.remove(index);
                             return true
                         }
@@ -190,7 +207,7 @@ fn remove_variable(var_name: Option<&&str>, variables: &mut HashMap<char, Variab
                 }
             };
             variables.remove(&key);
-            for (k, variable) in variables.iter_mut() {
+            for (_, variable) in variables.iter_mut() {
                 variable.rules = variable.rules.iter().filter(|rule| !rule.formula_string.contains(|c| c == key)).cloned().collect();
             };
             true

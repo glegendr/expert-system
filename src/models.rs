@@ -1,6 +1,5 @@
 use std::fmt;
 use crate::utils::tick_or_cross;
-use colored::Colorize;
 use std::collections::HashMap;
 
 /* ---------- RULE ---------- */
@@ -112,30 +111,13 @@ impl Operator {
             "or" | "|" => Some(Operator::Or),
             "xor" | "^" => Some(Operator::Xor),
             "equal" | "=" => Some(Operator::Equal),
+            "material" | ">>" => Some(Operator::Material),
             "not" | "!" => Some(Operator::Not),
             "then" | "=>" => Some(Operator::Then),
             "if-and-only-if" | "<=>" => Some(Operator::IfAndOnlyIf),
             "(" => Some(Operator::Parentesis(true)),
             ")" => Some(Operator::Parentesis(false)),
             _ => None
-        }
-    }
-
-    pub fn to_code_string(&self) -> String {
-        match self {
-            Operator::And => String::from("&"),
-            Operator::Or => String::from("|"),
-            Operator::Xor => String::from("^"),
-            Operator::Equal => String::from("="),
-            Operator::Material => String::from(">"),
-            Operator::Not => String::from("!"),
-            Operator::Then => String::from("=>"),
-            Operator::IfAndOnlyIf => String::from("<=>"),
-            Operator::Parentesis(true) => String::from("("),
-            Operator::Parentesis(false) => String::from(")"),
-            Operator::B(false) => String::from("0"),
-            Operator::B(true) => String::from("1"),
-            Operator::Var(s) => s.to_string(),
         }
     }
 
@@ -210,22 +192,6 @@ impl BTree {
         }
     }
 
-    pub fn not(sub_tree: BTree) -> BTree {
-        BTree {
-            c1: None,
-            c2: Some(Box::new(sub_tree)),
-            node: Operator::Not
-        }
-    }
-
-    pub fn create(node: Operator, c1: BTree, c2: BTree) -> BTree {
-        BTree {
-            node,
-            c1: Some(Box::new(c1)),
-            c2: Some(Box::new(c2))
-        }
-    }
-
     pub fn insert_a(&mut self, sub_tree: BTree) {
         self.c1 = Some(Box::new(sub_tree));
     }
@@ -240,18 +206,13 @@ impl BTree {
             (Operator::Or, Some(c1), Some(c2)) => format!("{c1}{c2}|"),
             (Operator::Xor, Some(c1), Some(c2)) => format!("{c1}{c2}^"),
             (Operator::Equal, Some(c1), Some(c2)) => format!("{c1}{c2}="),
-            (Operator::Material, Some(c1), Some(c2)) => format!("{c1}{c2}>"),
+            (Operator::Material, Some(c1), Some(c2)) => format!("{c1}{c2}>>"),
             (Operator::Not, Some(c1), None) => format!("{c1}!"),
             (Operator::Not, None, Some(c2)) => format!("{c2}!"),
             (Operator::B(b), _, _) => format!("{b}"),
             (Operator::Var(v), _, _) => format!("{v}"),
             _ => format!("{self:?}")
         }
-    }
-
-    pub fn from_string(formula: &str) -> Result<BTree, String> {
-        let mut new_formula = String::from(formula);
-        create_tree_from_string(&mut new_formula)
     }
 
     pub fn from_vec(formula: &mut Vec<Operator>) -> Result<BTree, String> {
@@ -319,39 +280,6 @@ impl BTree {
             }
         }
     }
-}
-
-pub fn eval_formula(formula: &str) -> bool {
-    match BTree::from_string(formula) {
-        Ok(tree) => tree.eval(),
-        Err(e) => {
-            println!("{e}");
-            false
-        }
-    }
-}
-
-fn create_tree_from_string(formula: &mut String) -> Result<BTree, String> {
-    if let Some(last_c) = formula.pop() {
-        let mut ret = match last_c {
-            '&' => BTree::new(Operator::And),
-            '|' => BTree::new(Operator::Or),
-            '^' => BTree::new(Operator::Xor),
-            '>' => BTree::new(Operator::Material),
-            '=' => BTree::new(Operator::Equal),
-            '!' => BTree::new(Operator::Not),
-            '1' => return Ok(BTree::new(Operator::B(true))),
-            '0' => return Ok(BTree::new(Operator::B(false))),
-            'a'..='z' | 'A'..='Z' => return Ok(BTree::new(Operator::Var(last_c))),
-            _ => Err("unexpected character {last_c} in btree")?
-        };
-        ret.insert_b(create_tree_from_string(formula)?);
-        if last_c != '!' {
-            ret.insert_a(create_tree_from_string(formula)?);
-        }
-        return Ok(ret)
-    }
-    Err(String::from("Error while parsing formula"))
 }
 
 fn calc_formula(tree: &Box<BTree>) -> Result<bool, String> {

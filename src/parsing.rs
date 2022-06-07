@@ -6,7 +6,7 @@ use crate::{
     utils::string_to_char,
 };
 
-const RESERVED_WORDS: [&'static str; 20] = [
+const RESERVED_WORDS: [&'static str; 22] = [
     "and",
     "&",
     "+",
@@ -16,6 +16,8 @@ const RESERVED_WORDS: [&'static str; 20] = [
     "^",
     "equal",
     "=",
+    "material",
+    ">>",
     "not",
     "!",
     "then",
