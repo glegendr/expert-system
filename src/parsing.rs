@@ -5,6 +5,7 @@ use crate::{
     models::{Operator, Variable, Rule, BTree},
     utils::string_to_char,
 };
+use colored::Colorize;
 
 const RESERVED_WORDS: [&'static str; 22] = [
     "and",
@@ -97,8 +98,8 @@ fn line_to_chunk(line: &str) -> Result<Vec<String>, String> {
 }
 
 /* ---------- FILLING VARIABLES ---------- */
-fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>  ) -> Result<(), String> {
-    if chunks.len() == 1 {
+fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silence: bool) -> Result<(), String> {
+    if chunks.len() == 0 {
         Err(String::from("def line expect variable"))?
     }
     let mut var = Variable::default();
@@ -135,28 +136,49 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>  ) -> R
         }
     }
     if let Some(variable) = variables.get_mut(&string_to_char(&var_name)) {
+        if !silence {
+            println!("{}", format!("- {var_name} => {variable}").red());
+        }
         variable.alias_true = var.alias_true;
         variable.alias_false = var.alias_false;
+        if !silence {
+            println!("{}", format!("+ {var_name} => {variable}").green());
+        }
     } else {
+        if !silence {
+            println!("{}", format!("+ {var_name} => {var}").green());
+        }
         drop(variables.insert(string_to_char(&var_name), var));
     }
     Ok(())
 }
 
-fn user_set(chunks: &Vec<String>, variables: &mut HashMap<char, Variable> ) -> Result<(), String> {
+fn user_set(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silence: bool) -> Result<(), String> {
     for chunk in chunks.iter() {
-        if let Some((_, var)) = variables.iter_mut().find(|(_, v)| v.alias_true == Some(String::from(chunk))) {
+        if let Some((k, var)) = variables.iter_mut().find(|(_, v)| v.alias_true == Some(String::from(chunk))) {
+            if !silence {
+                println!("{}", format!("+= {k}").green());
+            }
             var.value = true;
             var.locked = true;
         } else {
             for c in chunk.chars() {
                 if let Some(var) = variables.get_mut(&c) {
+                    if !silence {
+                        println!("{}", format!("+= {c}").green());
+                    }
                     var.value = true;
                     var.locked = true;
-                } else if let Some((_, var)) = variables.iter_mut().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk) {
+                } else if let Some((k, var)) = variables.iter_mut().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk) {   
+                    if !silence {
+                        println!("{}", format!("+= {k}").green());
+                    }
                     var.value = true;
                     var.locked = true;
                 } else {
+                    if !silence {
+                        println!("{}", format!("+= {c}").green());
+                    }
                     variables.insert(c, Variable::insert());
                 }
             }
@@ -182,7 +204,7 @@ fn aritmetic_to_string(aritmetic: &Vec<Vec<Operator>>, reverse: bool) -> String 
 
 }
 
-fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Result<(), String> {
+fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silence: bool) -> Result<(), String> {
     let mut aritmetic: Vec<Operator> = Vec::new();
     for chunk in chunks.iter() {
         if let Some(operator) = Operator::from_str(chunk) {
@@ -198,6 +220,9 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> R
             match chunk.chars().next().unwrap() {
                 'a'..='z' | 'A'..='Z' => {
                     variables.insert(string_to_char(chunk), Variable::default());
+                    if !silence {
+                        println!("{}", format!("+ {}", string_to_char(chunk)).green());
+                    }
                     aritmetic.push(Operator::Var(string_to_char(chunk)));
                 },
                 _ => Err(format!("{chunk} is not a valid variable name "))?
@@ -218,6 +243,9 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> R
         output: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(1).unwrap_or(&Vec::new()))?)?,
         formula_string: aritmetic_to_string(&splited, false)
     };
+    if !silence {
+        println!("{}", format!("+{rule}").green());
+    }
     for var in rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
         if let Operator::Var(v) = var {
             if let Some(var) = variables.get_mut(&v) {
@@ -231,6 +259,9 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> R
             output: rule.input.clone(),
             formula_string: aritmetic_to_string(&splited, true)
         };
+        if !silence {
+            println!("{}", format!("+{rule_2}").green());
+        }
         for var in rule_2.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
             if let Operator::Var(v) = var {
                 if let Some(var) = variables.get_mut(&v) {
@@ -242,19 +273,30 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> R
     Ok(())
 }
 
-fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Result<(), String> {
+fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silence: bool) -> Result<(), String> {
     for chunk in chunks.iter() {
         if let Some((_, var)) = variables.iter_mut().find(|(_, v)| v.alias_true == Some(String::from(chunk))) {
             var.requested = true;
         } else {
             for c in chunk.chars() {
                 if let Some(var) = variables.get_mut(&c) {
+                    if !silence {
+                        println!("{}", format!("+? {c}").green());
+                    }
                     var.requested = true;
-                } else if let Some((_, var)) = variables.iter_mut().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk) {
+                } else if let Some((k, var)) = variables.iter_mut().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk) {
+                    if !silence {
+                        println!("{}", format!("+? {k}").green());
+                    }
                     var.requested = true;
                 } else {
                     match c {
-                        'A'..='Z' | 'a'..='z' => variables.insert(c, Variable::request()),
+                        'A'..='Z' | 'a'..='z' => {
+                            variables.insert(c, Variable::request());
+                            if !silence {
+                                println!("{}", format!("+? {c}").green());
+                            }
+                        },
                         _ => Err(format!("{c} is not a valid variable name"))?,
                     };
                 }
@@ -265,31 +307,31 @@ fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Re
     Ok(())
 }
 
-pub fn parse_line(variables: &mut HashMap<char, Variable>, line: String, restricted: bool) -> Result<(), String> {
+pub fn parse_line(variables: &mut HashMap<char, Variable>, line: String, restricted: bool, silence: bool) -> Result<(), String> {
     let mut chunks = line_to_chunk(&line)?;
     if let Some(first) = chunks.iter().next() {
         match (first.as_str(), string_to_char(first)){
-            ("def", _) => def_var(&chunks[1..].to_vec(), variables)?,
-            ("if", _) => def_rules(&chunks[1..].to_vec(), variables)?,
-            ("=", _) => user_set(&chunks[1..].to_vec(), variables)?,
+            ("def", _) => def_var(&chunks[1..].to_vec(), variables, silence)?,
+            ("if", _) => def_rules(&chunks[1..].to_vec(), variables, silence)?,
+            ("=", _) => user_set(&chunks[1..].to_vec(), variables, silence)?,
             (_, '=') => {
                 if let Some(first) = chunks.get_mut(0) {
                     first.remove(0);
                 }
-                user_set(&chunks, variables)?
+                user_set(&chunks, variables, silence)?
             },
-            ("?", _) => requests(&chunks[1..].to_vec(), variables)?,
+            ("?", _) => requests(&chunks[1..].to_vec(), variables, silence)?,
             (_, '?') => {
                 if let Some(first) = chunks.get_mut(0) {
                     first.remove(0);
                 }
-                requests(&chunks, variables)?
+                requests(&chunks, variables, silence)?
             },
             _ => {
                 if restricted {
                     Err(format!("Expected one of [=, ?, def, if] found {line}"))?
                 } else {
-                    def_rules(&chunks, variables)?
+                    def_rules(&chunks, variables, silence)?
                 }
             }
         }
@@ -297,10 +339,10 @@ pub fn parse_line(variables: &mut HashMap<char, Variable>, line: String, restric
     Ok(())
 }
 
-pub fn fill_maps(variables: &mut HashMap<char, Variable>, file: &str) -> Result<(), String> {
+pub fn fill_maps(variables: &mut HashMap<char, Variable>, file: &str, silence: bool) -> Result<(), String> {
     let lines = to_splited_string(file)?;
     for line in lines {
-       parse_line(variables, line, false)?;
+       parse_line(variables, line, false, silence)?;
     }
     Ok(())
 }
