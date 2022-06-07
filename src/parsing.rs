@@ -52,7 +52,26 @@ fn line_to_chunk(line: &str) -> Result<Vec<String>, String> {
         let accessor = acc.len() - 1;
         match (c, scoped) {
             (' ', false) => acc.push(String::default()),
-            ('!' | '+' | '^'| '&', false) => {
+            ('>', false) => {
+                if let Some(last_chunk) = acc.get_mut(accessor) {
+                    match last_chunk.as_str() {
+                        "=" | ">" | "<=" => {
+                            last_chunk.push('>');
+                            acc.push(String::default())
+                        }
+                        _ => acc.push(String::from('>'))
+                    }
+                }
+            }
+            ('=', false) => {
+                if let Some(last_chunk) = acc.get_mut(accessor) {
+                    match last_chunk.as_str() {
+                        "<" => last_chunk.push('='),
+                        _ => acc.push(String::from('='))
+                    }
+                }
+            },
+            ('!' | '+' | '^'| '&' | '(' | ')' | '|', false) => {
                 acc.push(String::from(c));
                 acc.push(String::default())
             },
@@ -147,6 +166,22 @@ fn user_set(chunks: &Vec<String>, variables: &mut HashMap<char, Variable> ) -> R
     Ok(())
 }
 
+fn aritmetic_to_string(aritmetic: &Vec<Vec<Operator>>, reverse: bool) -> String {
+    aritmetic
+        .iter()
+        .fold(String::new(), |acc, v| {
+            let v_s = v.iter().fold(String::new(), |acc, ope| format!("{acc} {ope}"));
+            if acc.len() == 0 {
+                return v_s
+            }
+            match reverse {
+                true => format!("{v_s} =>{acc}", ),
+                false => format!("{acc} =>{v_s}")
+            }
+        })
+
+}
+
 fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> Result<(), String> {
     let mut aritmetic: Vec<Operator> = Vec::new();
     for chunk in chunks.iter() {
@@ -178,12 +213,11 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> R
         2 => (),
         _ => Err("expected only 1 => or <=> operator")?
     }
-    let mut rule = Rule {
+    let rule = Rule {
         input: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(0).unwrap_or(&Vec::new()))?)?,
         output: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(1).unwrap_or(&Vec::new()))?)?,
-        formula_string: String::from("")
+        formula_string: aritmetic_to_string(&splited, false)
     };
-    rule.formula_string = format!("{} => {}", rule.input, rule.output);
     for var in rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
         if let Operator::Var(v) = var {
             if let Some(var) = variables.get_mut(&v) {
@@ -192,12 +226,11 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>) -> R
         }
     }
     if let Some(Operator::IfAndOnlyIf) = aritmetic.iter().find(|ope| *ope == &Operator::IfAndOnlyIf) {
-        let mut rule_2 = Rule {
+        let rule_2 = Rule {
             input: rule.output.clone(),
             output: rule.input.clone(),
-            formula_string: String::from("")
+            formula_string: aritmetic_to_string(&splited, true)
         };
-        rule_2.formula_string = format!("{} => {}", rule_2.input, rule_2.output);
         for var in rule_2.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
             if let Operator::Var(v) = var {
                 if let Some(var) = variables.get_mut(&v) {

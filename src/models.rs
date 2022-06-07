@@ -95,11 +95,19 @@ pub enum Operator {
 impl fmt::Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Operator::IfAndOnlyIf => write!(f, "If-and-only-if"),
+            Operator::And =>  write!(f, "&"),
+            Operator::Or =>  write!(f, "|"),
+            Operator::Xor =>  write!(f, "^"),
+            Operator::Equal =>  write!(f, "="),
+            Operator::Material =>  write!(f, ">>"),
+            Operator::Not =>  write!(f, "!"),
+            Operator::Then =>  write!(f, "=>"),
+            Operator::IfAndOnlyIf =>  write!(f, "<=>"),
             Operator::Parentesis(true) => write!(f, "("),
             Operator::Parentesis(false) => write!(f, ")"),
             Operator::Var(s) => write!(f, "{s}"),
-            _ => write!(f, "{}", format!("{self:?}")),
+            Operator::B(true) =>  write!(f, "1"),
+            Operator::B(false) =>  write!(f, "0")
         }
     }
 }
@@ -136,7 +144,7 @@ impl Operator {
                         }
                     }
                 },
-                Operator::Not => stack.push(operator.clone()),
+                Operator::Not | Operator::Parentesis(true) => stack.push(operator.clone()),
                 _ => {
                     if output.len() == 0 {
                         Err(format!("unexpected operator {operator}"))?
