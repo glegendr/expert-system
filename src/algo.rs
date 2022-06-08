@@ -1,29 +1,38 @@
 use std::collections::HashMap;
 use crate::models::{Variable, Operator};
 
+pub fn print_history(history: String) {
+    let paths: Vec<&str> = history.split('%').collect();
+    println!("{:?}", paths);
+}
+
 pub fn algo_v1(variables: &mut HashMap<char, Variable>) {
     let requested: Vec<char> = variables.iter().filter(|(_,v)| v.requested == true).map(|(k,_)| *k).collect();
     for c in requested {
-        match search_query(c, variables, &mut Vec::new()) {
-            Ok(res) => println!("{} is {}", c, res),
+        let history = String::new();
+        match search_query(c, variables, &mut Vec::new(), history) {
+            Ok((res, history)) => {
+                println!("{} is {}", c, res);
+                println!("UI {}", history);
+                print_history(history);
+            },
             Err(e) => println!("{} => {}", c, e)
         }
     }
 }
 
-pub fn search_query(query: char, variables: &mut HashMap<char, Variable>, old_rules: &mut Vec<String>) -> Result<bool, String> {
+pub fn search_query(query: char, variables: &mut HashMap<char, Variable>, old_rules: &mut Vec<String>, mut history: String) -> Result<(bool, String), String> {
     for rule in variables.get(&query).unwrap().rules.iter() {
         if old_rules.contains(&rule.formula_string.clone()) == true {
             return Err("Error: the rule loop".to_string());
         }
     }
-    for rule in variables.get(&query).unwrap().rules.iter() {
-        old_rules.push(rule.formula_string.clone());
-    }
 
     if let Some(var) = variables.get(&query) {
         if var.locked == true {
-            return Ok(var.value)
+            history.push_str("%i ");
+            history.push(query);
+            return Ok((var.value, history))
         }
     }
     let query_rules = variables.get(&query).unwrap().rules.clone();
@@ -32,7 +41,9 @@ pub fn search_query(query: char, variables: &mut HashMap<char, Variable>, old_ru
                 x.value = false;
                 x.locked = true;
             }
-        return Ok(false)
+        history.push_str("%n ");
+        history.push(query);
+        return Ok((false, history))
     }
 
     let mut i = 0;
@@ -40,14 +51,27 @@ pub fn search_query(query: char, variables: &mut HashMap<char, Variable>, old_ru
         for c in query_rules[i].input.to_string().chars() {
             if c.is_alphabetic() == true {
                 if variables.get(&c).unwrap().locked == false {
-                    match search_query(c, variables, old_rules) {
-                        Ok(b) => {
+                    let mut new_vec = old_rules.clone();
+                    if new_vec.contains(&query_rules[i].formula_string.clone()) == true {
+                        return Err("Error: the rule loop".to_string());
+                    } else {
+                        new_vec.push(query_rules[i].formula_string.clone());
+                    }
+                    match search_query(c, variables, &mut new_vec, history.clone()) {
+                        Ok((ret, h)) => {
+                            history = h;
                             if let Some(x) = variables.get_mut(&c) {
-                                x.value = b;
-                                x.locked = b;
+                                x.value = ret;
+                                if x.locked == false {
+                                    x.locked = ret;
+                                }
                             }
                         }
-                        Err(_) => (),
+                        Err(e) => {
+                            if i >= query_rules.len() - 1 {
+                                return Err(e);
+                            }
+                        }
                     };
                 }
             }
@@ -98,7 +122,9 @@ pub fn search_query(query: char, variables: &mut HashMap<char, Variable>, old_ru
                         x.locked = true;
                     }
                 }
-                    return Ok(true)
+                    history.push_str("%r");
+                    history.push_str(&query_rules[i].formula_string.clone());
+                    return Ok((true, history))
             }
         }
         i += 1;
@@ -107,5 +133,5 @@ pub fn search_query(query: char, variables: &mut HashMap<char, Variable>, old_ru
         x.value = false;
         //x.locked = false;
     }
-    Ok(false)
+    Ok((false, history))
 }
