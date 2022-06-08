@@ -1,0 +1,18 @@
+#A => B
+#B => A # As
+#
+#D => E
+#E => D
+#
+#!R => G
+#G => R
+
+A => B
+B + D => C
+C => A
+
+#X ^ Y => Z
+#Z => X
+
+?ABC
+=BC

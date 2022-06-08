@@ -17,7 +17,7 @@ impl fmt::Display for Rule {
 }
 
 /* ---------- VARIABLE ---------- */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Variable {
     pub value: bool,
     pub locked: bool,

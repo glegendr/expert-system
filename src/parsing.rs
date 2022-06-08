@@ -32,7 +32,99 @@ const RESERVED_WORDS: [&'static str; 22] = [
     ")"
 ];
 
-/* ---------- STRUCTS ---------- */
+fn rule_to_truth_table(rule: &Rule) -> Vec<HashMap<char, bool>> {
+    let vars = rule.input.find_nodes(|n| match n {Operator::Var(_) => true, _ => false});
+    let permutations: Vec<u32> = (0..=u32::MAX >> (32 - vars.len())).collect();
+    let mut ret: Vec<HashMap<char, Variable>> = Vec::new();
+    for permutation in permutations {
+        let mut variables = HashMap::new();
+        for (i, var) in vars.iter().enumerate() {
+            match var {
+                Operator::Var(v) => {
+                    variables.insert(*v, Variable {
+                        value: (permutation >> i) & 1 == 1,
+                        locked: false,
+                        requested: false,
+                        rules: Vec::new(),
+                        alias_true: None,
+                        alias_false: None,
+                    });
+                },
+                _ => ()
+            }
+        }
+        if rule.input.enrich(&variables).eval() {
+            ret.push(variables);
+        }
+    }
+    ret.iter().map(|map| map.iter().fold(HashMap::new(), |mut acc, (k, v)| {
+        acc.insert(*k, v.value);
+        acc
+    })).collect()
+}
+
+fn check_loop_2(variables: &HashMap<char, Variable>, mut history: Vec<(char, Vec<HashMap<char, bool>>)>) -> Vec<(char, Vec<HashMap<char, bool>>)> {
+    match history.pop() {
+        Some((k, _)) => {
+            if let Some(var) = variables.get(&k) {
+                let mut v = Vec::new();
+                for rule in &var.rules {
+                    v.append(&mut rule_to_truth_table(rule));
+                }
+                history.push((k, v));
+                for rule in &var.rules {
+                    for c in rule.input.to_string().chars() {
+                        if c.is_alphabetic() == true && !history.iter().any(|(k, _)| *k == c) {
+                            let mut new_history = history.clone();
+                            new_history.push((c, Vec::new()));
+                            history = check_loop_2(&variables, new_history);
+                        }
+                    }
+                }
+            }
+            return history
+        },
+        None => return history
+    }
+}
+
+fn check_loop(variables: &HashMap<char, Variable>, rule: &Rule) -> Result<(), String>{
+    let outuput_var = rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false});
+    for var in outuput_var {
+        match var {
+            Operator::Var(k) => {
+                let mut map: HashMap<char, HashMap<char, bool>> = HashMap::new();
+                let ret_loop = check_loop_2(&variables, vec![(k, rule_to_truth_table(rule))]);
+                for (k, v) in ret_loop {
+                    for v2 in v {
+                        for v3 in &v2 {
+                            if let Some(x) = map.get_mut(&k) {
+                                x.insert(*v3.0, *v3.1);
+                            } else {
+                                map.insert(k, v2.clone());
+                            }
+                        }
+                    }
+                }
+                for (k_1, map_1) in &map {
+                    for (k_2, _) in map_1 {
+                        if let Some(diff_1) = map.get(k_1).unwrap().get(k_2) {
+                            if let Some(diff_2_1) = map.get(k_2) {
+                                if let Some(diff_2_2) = diff_2_1.get(k_1) {
+                                    if diff_1 != diff_2_2 {
+                                        Err(format!("contradiction in rule{rule}"))?
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            _ => ()
+        }
+    }
+    Ok(())
+}
 
 /* ---------- STRING TRANSFORMATIONS ---------- */
 fn to_splited_string(file: &str) -> Result<Vec<String>, String> {
@@ -209,7 +301,7 @@ fn check_splited(splited: &Vec<Vec<Operator>>) -> Result<(), String> {
         let mut last_op = None;
         for operator in part {
             match (operator, &last_op) {
-                (Operator::Var(_) | Operator::Parentesis(true), None | Some(Operator::Or) | Some(Operator::And) | Some(Operator::Xor) | Some(Operator::Equal) | Some(Operator::Not) | Some(Operator::Parentesis(true))) |
+                (Operator::Var(_) | Operator::Parentesis(true), None | Some(Operator::Or) | Some(Operator::Material) | Some(Operator::And) | Some(Operator::Xor) | Some(Operator::Equal) | Some(Operator::Not) | Some(Operator::Parentesis(true))) |
                 (Operator::Or | Operator::And | Operator::Xor | Operator::Equal | Operator::Material, Some(Operator::Var(_)) | Some(Operator::Parentesis(false))) |
                 (Operator::Not, None | Some(Operator::Or) | Some(Operator::And) | Some(Operator::Xor) | Some(Operator::Equal)) |
                 (Operator::Parentesis(false), Some(Operator::Parentesis(false)) | Some(Operator::Var(_))) => {
@@ -266,16 +358,24 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, sile
     if rule.output.find_nodes(|n| match n {Operator::Var(_) | Operator::And => false, _ => true}).len() > 0 {
         Err("output can only handle & and variables")?
     }
+    let outuput_var = rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false});
+    let input_var = rule.input.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false});
+    for var in input_var {
+        if outuput_var.contains(&var) {
+            Err(format!("{var} is both in input and output"))?
+        }
+    }
     if !silence {
         println!("{}", format!("+{rule}").green());
     }
-    for var in rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
+    for var in outuput_var {
         if let Operator::Var(v) = var {
             if let Some(var) = variables.get_mut(&v) {
                 var.rules.push(rule.clone());
             }
         }
     }
+    check_loop(&variables, &rule)?;
     if let Some(Operator::IfAndOnlyIf) = aritmetic.iter().find(|ope| *ope == &Operator::IfAndOnlyIf) {
         let rule_2 = Rule {
             input: rule.output.clone(),
@@ -295,6 +395,7 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, sile
                 }
             }
         }
+        check_loop(&variables, &rule_2)?;
     }
     Ok(())
 }
@@ -333,35 +434,37 @@ fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silen
     Ok(())
 }
 
-pub fn parse_line(variables: &mut HashMap<char, Variable>, line: String, restricted: bool, silence: bool) -> Result<(), String> {
+pub fn parse_line(old_variables: &mut HashMap<char, Variable>, line: String, restricted: bool, silence: bool) -> Result<(), String> {
+    let mut variables = (*old_variables).clone();
     let mut chunks = line_to_chunk(&line)?;
     if let Some(first) = chunks.iter().next() {
         match (first.as_str(), string_to_char(first)){
-            ("def", _) => def_var(&chunks[1..].to_vec(), variables, silence)?,
-            ("if", _) => def_rules(&chunks[1..].to_vec(), variables, silence)?,
-            ("=", _) => user_set(&chunks[1..].to_vec(), variables, silence)?,
+            ("def", _) => def_var(&chunks[1..].to_vec(), &mut variables, silence)?,
+            ("if", _) => def_rules(&chunks[1..].to_vec(), &mut variables, silence)?,
+            ("=", _) => user_set(&chunks[1..].to_vec(), &mut variables, silence)?,
             (_, '=') => {
                 if let Some(first) = chunks.get_mut(0) {
                     first.remove(0);
                 }
-                user_set(&chunks, variables, silence)?
+                user_set(&chunks, &mut variables, silence)?
             },
-            ("?", _) => requests(&chunks[1..].to_vec(), variables, silence)?,
+            ("?", _) => requests(&chunks[1..].to_vec(), &mut variables, silence)?,
             (_, '?') => {
                 if let Some(first) = chunks.get_mut(0) {
                     first.remove(0);
                 }
-                requests(&chunks, variables, silence)?
+                requests(&chunks, &mut variables, silence)?
             },
             _ => {
                 if restricted {
                     Err(format!("Expected one of [=, ?, def, if] found {line}"))?
                 } else {
-                    def_rules(&chunks, variables, silence)?
+                    def_rules(&chunks, &mut variables, silence)?
                 }
             }
         }
     }
+    *old_variables = variables;
     Ok(())
 }
 

@@ -12,8 +12,12 @@ use crate::leakser::Flag;
 pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
     let mut variables: HashMap<char, Variable> = HashMap::new();
     for file in files {
-        if let Err(e) = fill_maps(&mut variables, file, true) {
-            println!("failed to parse {file}:\n{e}");
+        let mut new_variables = variables.clone();
+        if let Err(e) = fill_maps(&mut new_variables, file, true) {
+            println!("{}", format!(" - {file}: {e}").red());
+        } else {
+            println!("{}", format!(" + {file}").green());
+            variables = new_variables;
         }
     }
     let mut rl = Editor::<()>::new();
@@ -41,10 +45,6 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                         } else {
                             println!("no rules set");
                         }
-                        status = tick_or_cross(true);
-                    },
-                    "exec" | "run" | "execute" => {
-                        algo_v1(&mut variables);
                         status = tick_or_cross(true);
                     },
                     "clear" => {
@@ -78,6 +78,11 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                                         let mut iter_chunk = chunks.iter();
                                         let mut ret = true;
                                         iter_chunk.next();
+                                        if iter_chunk.len() == 0 {
+                                            algo_v1(&mut variables);
+                                            status = tick_or_cross(true);
+                                            continue
+                                        }
                                         for var in iter_chunk {
                                             let var_name = match variables.iter().find(|(k, v)| k.to_string() == var.clone() || v.alias_false == Some(String::from(*var)) || v.alias_true == Some(String::from(*var))) {
                                                 Some((k, _)) => *k,
@@ -87,8 +92,8 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                                                     continue
                                                 }
                                             };
-                                            match search_query(var_name, &mut variables, &mut Vec::new()) {
-                                                Ok(res) => println!("{var_name} is {res}"),
+                                            match search_query(var_name, &mut variables, &mut Vec::new(), String::default()) {
+                                                Ok((res, _)) => println!("{var_name} is {res}"),
                                                 Err(e) => println!("{e}")
                                             }
                                         }
@@ -113,60 +118,55 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                                                 "all" => {
                                                     variables.clear();
                                                     status = tick_or_cross(true);
+                                                    println!("Ok");
                                                 }
                                                 "set" | "=" => {
-                                                    match chunks.get(2) {
-                                                        Some(var) => {
-                                                            match variables.iter_mut().find(|(k, _)| (**k).to_string() == *var) {
-                                                                Some((k, var)) => {
-                                                                    if var.locked || var.value {
-                                                                        println!("{}", format!("- {k}: {var}").red());
-                                                                        var.locked = false;
-                                                                        var.value = false;
-                                                                        println!("{}", format!("+ {k}: {var}").green());
-                                                                    }
-                                                                    status = tick_or_cross(true);
+                                                    let mut iter_chunk = chunks.iter();
+                                                    iter_chunk.next();
+                                                    iter_chunk.next();
+                                                    for chunk in iter_chunk {
+                                                        match variables.iter_mut().find(|(k, _)| (**k).to_string() == *chunk) {
+                                                            Some((k, var)) => {
+                                                                if var.locked || var.value {
+                                                                    println!("{}", format!("- {k}: {var}").red());
+                                                                    var.locked = false;
+                                                                    var.value = false;
+                                                                    println!("{}", format!("+ {k}: {var}").green());
                                                                 }
-                                                                None => {
-                                                                    println!("{}", format!("{var} does not exist").red());
-                                                                    status = tick_or_cross(false);
-                                                                }
+                                                                status = tick_or_cross(true);
                                                             }
-                                                        },
-                                                        None => {
-                                                            println!("{}", format!("no variable providen").red());
-                                                            status = tick_or_cross(false);
+                                                            None => {
+                                                                println!("{}", format!("{chunk} does not exist").red());
+                                                                status = tick_or_cross(false);
+                                                            }
                                                         }
                                                     }
                                                 }
                                                 "request" | "req" | "?" => {
-                                                    match chunks.get(2) {
-                                                        Some(var) => {
-                                                            match variables.iter_mut().find(|(k, _)| (**k).to_string() == *var) {
-                                                                Some((k, var)) => {
-                                                                    if var.requested {
-                                                                        println!("{}", format!("- {k}: {var}").red());
-                                                                        var.requested = false;
-                                                                        println!("{}", format!("+ {k}: {var}").green());
-                                                                    }
-                                                                    status = tick_or_cross(true);
+                                                    let mut iter_chunk = chunks.iter();
+                                                    iter_chunk.next();
+                                                    iter_chunk.next();
+                                                    for chunk in iter_chunk {
+                                                        match variables.iter_mut().find(|(k, _)| (**k).to_string() == *chunk) {
+                                                            Some((k, var)) => {
+                                                                if var.requested {
+                                                                    println!("{}", format!("- {k}: {var}").red());
+                                                                    var.requested = false;
+                                                                    println!("{}", format!("+ {k}: {var}").green());
                                                                 }
-                                                                None => {
-                                                                    println!("{}", format!("{var} does not exist").red());
-                                                                    status = tick_or_cross(false);
-                                                                }
+                                                                status = tick_or_cross(true);
                                                             }
-                                                        },
-                                                        None => {
-                                                            println!("{}", format!("no variable providen").red());
-                                                            status = tick_or_cross(false);
+                                                            None => {
+                                                                println!("{}", format!("{chunk} does not exist").red());
+                                                                status = tick_or_cross(false);
+                                                            }
                                                         }
                                                     }
                                                 }
                                                 "rule" | "rules" => status = tick_or_cross(remove_rule(chunks.get(2), &mut variables)),
                                                 "var" | "variable" => status = tick_or_cross(remove_variable(chunks.get(2), &mut variables)),
                                                 _ => {
-                                                    println!("Expected one of [rule, var, variable, all] found {kind}");
+                                                    println!("Expected one of [rule, var, variable, all, ?, =] found {kind}");
                                                     status = tick_or_cross(false);
                                                 }
                                             }
@@ -213,6 +213,13 @@ fn remove_rule(nb_s: Option<&&str>, variables: &mut HashMap<char, Variable>) -> 
         return false
     }
     match nb_s {
+        Some(&"*") | Some(&"all") => {
+            for (_, var) in variables.iter_mut() {
+                var.rules = Vec::new();
+            }
+            println!("Ok");
+            true
+        },
         Some(nb_s) => {
             match nb_s.parse::<usize>() {
                 Ok(nb) => {
@@ -263,7 +270,6 @@ fn remove_variable(var_name: Option<&&str>, variables: &mut HashMap<char, Variab
                 for filt in filtered {
                     println!("{}", format!("-{filt}").red());
                 }
-
             };
             true
         },
@@ -296,8 +302,8 @@ fn helper(commands: Vec<&&str>) -> bool {
                 println!("remove all\n - clear all variables and rules");
                 println!("remove var <Variable>\n - remove the variable and all rules implicated");
                 println!("remove rule <Index>\n - remove the rule depending the index listed with \"rules\"");
-                println!("remove ? <Variable>\n - remove the variable from requested one");
-                println!("remove = <Variable>\n - remove the variable from seted one");
+                println!("remove ? <?Variable ...>\n - remove the variable from requested one");
+                println!("remove = <?Variable ...>\n - remove the variable from seted one");
             },
             "=" => println!("= <Variable ...>\n - set the variable(s) to true"),
             "?" => println!("? <Variable ...>\n - set the variable(s) to requested"),
