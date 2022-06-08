@@ -114,6 +114,55 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                                                     variables.clear();
                                                     status = tick_or_cross(true);
                                                 }
+                                                "set" | "=" => {
+                                                    match chunks.get(2) {
+                                                        Some(var) => {
+                                                            match variables.iter_mut().find(|(k, _)| (**k).to_string() == *var) {
+                                                                Some((k, var)) => {
+                                                                    if var.locked || var.value {
+                                                                        println!("{}", format!("- {k}: {var}").red());
+                                                                        var.locked = false;
+                                                                        var.value = false;
+                                                                        println!("{}", format!("+ {k}: {var}").green());
+                                                                    }
+                                                                    status = tick_or_cross(true);
+                                                                }
+                                                                None => {
+                                                                    println!("{}", format!("{var} does not exist").red());
+                                                                    status = tick_or_cross(false);
+                                                                }
+                                                            }
+                                                        },
+                                                        None => {
+                                                            println!("{}", format!("no variable providen").red());
+                                                            status = tick_or_cross(false);
+                                                        }
+                                                    }
+                                                }
+                                                "request" | "req" | "?" => {
+                                                    match chunks.get(2) {
+                                                        Some(var) => {
+                                                            match variables.iter_mut().find(|(k, _)| (**k).to_string() == *var) {
+                                                                Some((k, var)) => {
+                                                                    if var.requested {
+                                                                        println!("{}", format!("- {k}: {var}").red());
+                                                                        var.requested = false;
+                                                                        println!("{}", format!("+ {k}: {var}").green());
+                                                                    }
+                                                                    status = tick_or_cross(true);
+                                                                }
+                                                                None => {
+                                                                    println!("{}", format!("{var} does not exist").red());
+                                                                    status = tick_or_cross(false);
+                                                                }
+                                                            }
+                                                        },
+                                                        None => {
+                                                            println!("{}", format!("no variable providen").red());
+                                                            status = tick_or_cross(false);
+                                                        }
+                                                    }
+                                                }
                                                 "rule" | "rules" => status = tick_or_cross(remove_rule(chunks.get(2), &mut variables)),
                                                 "var" | "variable" => status = tick_or_cross(remove_variable(chunks.get(2), &mut variables)),
                                                 _ => {
@@ -229,47 +278,31 @@ fn remove_variable(var_name: Option<&&str>, variables: &mut HashMap<char, Variab
 fn helper(commands: Vec<&&str>) -> bool {
     let mut ret = true;
     if commands.len() == 0 {
-        print_help();
-        println!("");
-        print_quit();
-        println!("");
-        print_variables_h();
-        println!("");
-        print_rules_h();
-        println!("");
-        print_clear();
-        println!("");
-        print_file();
-        println!("");
-        print_run();
-        println!("");
-        print_remove();
-        println!("");
-        print_equal();
-        println!("");
-        print_req();
-        println!("");
-        print_def();
-        println!("");
-        print_if();
+        return helper(vec![&"help", &"quit", &"var", &"rule", &"clear", &"file", &"run", &"del", &"=", &"?", &"def", &"if"])
     }
     for (i, command) in commands.into_iter().enumerate() {
         if i > 0 {
             println!("");
         }
         match *command {
-            "help" => print_help(),
-            "quit" => print_quit(),
-            "variables" | "var" => print_variables_h(),
-            "rules" | "rule" => print_rules_h(),
-            "clear" => print_clear(),
-            "file" => print_file(),
-            "exec" | "run" | "execute" => print_run(),
-            "remove" | "del" | "delete" => print_remove(),
-            "=" => print_equal(),
-            "?" => print_req(),
-            "def" => print_def(),
-            "if" => print_if(),
+            "help" => println!("help <?Command ...>\n - display all commands or asked one"),
+            "quit" => println!("quit\n - quit the program"),
+            "variables" | "var" => println!("variables / var\n - list all variables and their rules"),
+            "rules" | "rule" => println!("rules / rule\n - list all rules"),
+            "clear" => println!("clear\n - alias for \"remove all\""),
+            "file" => println!("file <Path>\n - read the file in path and enrich variables and rules"),
+            "exec" | "run" | "execute" => println!("run <?Variable ...>\n - run the algorithm with variable if providen"),
+            "remove" | "del" | "delete" => {
+                println!("remove all\n - clear all variables and rules");
+                println!("remove var <Variable>\n - remove the variable and all rules implicated");
+                println!("remove rule <Index>\n - remove the rule depending the index listed with \"rules\"");
+                println!("remove ? <Variable>\n - remove the variable from requested one");
+                println!("remove = <Variable>\n - remove the variable from seted one");
+            },
+            "=" => println!("= <Variable ...>\n - set the variable(s) to true"),
+            "?" => println!("? <Variable ...>\n - set the variable(s) to requested"),
+            "def" => println!("def <Variable> <?alias true> <?alias false>\n - create a new variable with name \"Variable\""),
+            "if" => println!("if <Rule>\n - create a new rule"),
             "ls" | "pwd" => {
                 Command::new("man").arg(command).status().expect("failed to execute process");
             }
@@ -281,21 +314,3 @@ fn helper(commands: Vec<&&str>) -> bool {
     }
     ret
 }
-
-fn print_help() {println!("help <?Command ...>\n - display all commands or asked one")}
-fn print_quit() { println!("quit\n - quit the program")}
-fn print_variables_h() { println!("variables / var\n - list all variables and their rules")}
-fn print_rules_h() { println!("rules / rule\n - list all rules")}
-fn print_run() { println!("run <?Variable ...>\n - run the algorithm with variable if providen")}
-fn print_clear() { println!("clear\n - alias for \"remove all\"")}
-fn print_file() { println!("file <Path>\n - read the file in path and enrich variables and rules")}
-fn print_remove() {
-    println!("remove <kind> <?value>");
-    println!("remove all\n - clear all variables and rules");
-    println!("remove var <Variable>\n - remove the variable and all rules implicated");
-    println!("remove rule <Index>\n - remove the rule depending the index listed with \"rules\"");
-}
-fn print_equal() { println!("= <Variable ...>\n - set the variable(s) to true")}
-fn print_req() { println!("? <Variable ...>\n - set the variable(s) to requested")}
-fn print_def() { println!("def <Variable> <?alias true> <?alias false>\n - create a new variable with name \"Variable\"")}
-fn print_if() { println!("if <Rule>\n - create a new rule")}

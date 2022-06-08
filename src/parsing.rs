@@ -204,6 +204,25 @@ fn aritmetic_to_string(aritmetic: &Vec<Vec<Operator>>, reverse: bool) -> String 
 
 }
 
+fn check_splited(splited: &Vec<Vec<Operator>>) -> Result<(), String> {
+    for part in splited {
+        let mut last_op = None;
+        for operator in part {
+            match (operator, &last_op) {
+                (Operator::Var(_) | Operator::Parentesis(true), None | Some(Operator::Or) | Some(Operator::And) | Some(Operator::Xor) | Some(Operator::Equal) | Some(Operator::Not) | Some(Operator::Parentesis(true))) |
+                (Operator::Or | Operator::And | Operator::Xor | Operator::Equal | Operator::Material, Some(Operator::Var(_)) | Some(Operator::Parentesis(false))) |
+                (Operator::Not, None | Some(Operator::Or) | Some(Operator::And) | Some(Operator::Xor) | Some(Operator::Equal)) |
+                (Operator::Parentesis(false), Some(Operator::Parentesis(false)) | Some(Operator::Var(_))) => {
+                    last_op = Some(operator.clone());
+                },
+                (_, None) => Err(format!("Unexpected operator {operator}"))?,
+                (_, Some(last_op)) => Err(format!("Unexpected operator {operator} following {last_op}"))?
+            }
+        }
+    }
+    Ok(())
+}
+
 fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silence: bool) -> Result<(), String> {
     let mut aritmetic: Vec<Operator> = Vec::new();
     for chunk in chunks.iter() {
@@ -238,11 +257,15 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, sile
         2 => (),
         _ => Err("expected only 1 => or <=> operator")?
     }
+    check_splited(&splited)?;
     let rule = Rule {
         input: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(0).unwrap_or(&Vec::new()))?)?,
         output: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(1).unwrap_or(&Vec::new()))?)?,
         formula_string: aritmetic_to_string(&splited, false)
     };
+    if rule.output.find_nodes(|n| match n {Operator::Var(_) | Operator::And => false, _ => true}).len() > 0 {
+        Err("output can only handle & and variables")?
+    }
     if !silence {
         println!("{}", format!("+{rule}").green());
     }
@@ -259,6 +282,9 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, sile
             output: rule.input.clone(),
             formula_string: aritmetic_to_string(&splited, true)
         };
+        if rule_2.output.find_nodes(|n| match n {Operator::Var(_) | Operator::And => false, _ => true}).len() > 0 {
+            Err("output can only handle & and variables")?
+        }
         if !silence {
             println!("{}", format!("+{rule_2}").green());
         }
