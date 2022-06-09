@@ -8,8 +8,9 @@ use crate::parsing::{fill_maps, parse_line};
 use crate::models::{Variable, Rule};
 use crate::algo::{algo_v1, search_query};
 use crate::leakser::Flag;
+use crate::utils::print_history;
 
-pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
+pub fn interactive_mode(files: &Vec<String>, flags: &mut Vec<Flag>) {
     let mut variables: HashMap<char, Variable> = HashMap::new();
     for file in files {
         let mut new_variables = variables.clone();
@@ -31,6 +32,32 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                 lower_line = lower_line.trim().to_string();
                 match lower_line.as_str() {
                     "quit" => break,
+                    "reset" => {
+                        variables.clear();
+                        for file in files {
+                            let mut new_variables = variables.clone();
+                            if let Err(e) = fill_maps(&mut new_variables, file, true) {
+                                println!("{}", format!(" - {file}: {e}").red());
+                            } else {
+                                println!("{}", format!(" + {file}").green());
+                                variables = new_variables;
+                            }
+                        }
+                        status = tick_or_cross(true);
+                    }
+                    "trace" => {
+                        match flags.contains(&Flag::Trace) {
+                            true => {
+                                *flags = flags.iter().filter(|flag| *flag != &Flag::Trace).cloned().collect();
+                                println!("{}", "- trace".red());
+                            },
+                            _ => {
+                                flags.push(Flag::Trace);
+                                println!("{}", "+ trace".green());
+                            }
+                        }
+                        status = tick_or_cross(true);
+                    },
                     "variables" | "var" => {
                         if variables.len() > 0 {
                             print_variables(&variables);
@@ -79,7 +106,7 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                                         let mut ret = true;
                                         iter_chunk.next();
                                         if iter_chunk.len() == 0 {
-                                            algo_v1(&mut variables);
+                                            algo_v1(&mut variables, flags.contains(&Flag::Trace));
                                             status = tick_or_cross(true);
                                             continue
                                         }
@@ -93,8 +120,14 @@ pub fn interactive_mode(files: &Vec<String>, _flags: &Vec<Flag>) {
                                                 }
                                             };
                                             match search_query(var_name, &mut variables, &mut Vec::new(), String::default()) {
-                                                Ok((res, _)) => println!("{var_name} is {res}"),
-                                                Err(e) => println!("{e}")
+                                                Ok((res, history)) => {
+                                                    if flags.contains(&Flag::Trace) {
+                                                        print_history(history, &variables, var_name);
+                                                    } else {
+                                                        println!("{} is {}", var_name, res);
+                                                    }
+                                                },
+                                                Err(e) => println!("{} => {}", var_name, e)
                                             }
                                         }
                                         status = tick_or_cross(ret);
@@ -284,7 +317,7 @@ fn remove_variable(var_name: Option<&&str>, variables: &mut HashMap<char, Variab
 fn helper(commands: Vec<&&str>) -> bool {
     let mut ret = true;
     if commands.len() == 0 {
-        return helper(vec![&"help", &"quit", &"var", &"rule", &"clear", &"file", &"run", &"del", &"=", &"?", &"def", &"if"])
+        return helper(vec![&"help", &"trace", &"quit", &"var", &"rule", &"clear", &"file", &"run", &"del", &"=", &"?", &"def", &"if"])
     }
     for (i, command) in commands.into_iter().enumerate() {
         if i > 0 {
@@ -292,6 +325,7 @@ fn helper(commands: Vec<&&str>) -> bool {
         }
         match *command {
             "help" => println!("help <?Command ...>\n - display all commands or asked one"),
+            "trace" => println!("trace\n - unable/disable algorithm's trace"),
             "quit" => println!("quit\n - quit the program"),
             "variables" | "var" => println!("variables / var\n - list all variables and their rules"),
             "rules" | "rule" => println!("rules / rule\n - list all rules"),

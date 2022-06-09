@@ -14,15 +14,17 @@ use utils::print_variables;
 use interactive::interactive_mode;
 
 fn main() -> Result<(), String> {
-    let (files, flags) = leaks()?;
+    let (files, mut flags) = leaks()?;
     if flags.iter().any(|f| f == &Flag::Interactive) {
-        interactive_mode(&files, &flags);
+        interactive_mode(&files, &mut flags);
     } else {
         for file in files.iter() {
             let mut variables: HashMap<char, Variable> = HashMap::new();
             fill_maps(&mut variables, file, true)?;
-            print_variables(&variables);
-            algo_v1(&mut variables);
+            if flags.contains(&Flag::Variables) {
+                print_variables(&variables);
+            }
+            algo_v1(&mut variables, flags.contains(&Flag::Trace));
         }
     }
     Ok(())

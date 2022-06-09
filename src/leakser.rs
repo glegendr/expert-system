@@ -1,11 +1,12 @@
 use std::env::args;
 use crate::utils::string_to_char;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Flag {
     Help,
     Interactive,
-    Trace
+    Trace,
+    Variables
 }
 
 impl Flag {
@@ -14,6 +15,7 @@ impl Flag {
             "-h" | "--help" => Flag::Help,
             "-i" | "--interactive" => Flag::Interactive,
             "-t" | "--trace" => Flag::Trace,
+            "-v" | "--variables" => Flag::Variables,
             _ => Err(format!("{string} is an undefined flag"))?
         })
     }
@@ -23,6 +25,8 @@ pub fn print_helper(error: &str) -> Result<(), String> {
     println!("cargo run --release -- [maps] [flags]");
     println!("-h, --help             print this helper");
     println!("-i, --interactive      launch interactive mode");
+    println!("-t, --trace            display algorithm's trace");
+    println!("-v, --variables        display variables before running algorithm (no interactive)");
     Err(String::from(error))
 }
 
