@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use crate::models::Variable;
 use colored::{Colorize, ColoredString};
+use crate::translate::{Lang, Translate};
 
 pub fn string_to_char(string: &str) -> char {
     string.chars().next().unwrap_or('/')
@@ -37,27 +38,27 @@ pub fn print_rules(variables: &HashMap<char, Variable>)  {
     }
 }
 
-fn print_false_no_rule(mut s: String, variables: &HashMap<char, Variable>) {
+fn print_false_no_rule(mut s: String, variables: &HashMap<char, Variable>, lang: &Lang) {
     let value: char = s.pop().unwrap();
     if let Some(var) = variables.get(&value) {
         match var.value {
             true => {
                 match &var.alias_true {
-                    Some(alias) => println!("We know {} because no rule assign it.", alias.green()),
-                    _ => println!("We know {} is {} because no rule assign it.", value.to_string().purple().bold(), "true".green()),
+                    Some(alias) => Translate::NoRule.print(lang, alias.green(), None),
+                    _ => Translate::NoRule.print(lang, value.to_string().purple().bold(), Some(var.value)),
                 }
             },
             false => {
                 match &var.alias_false {
-                    Some(alias) => println!("We know {} because no rule assign it.", alias.red()),
-                    _ => println!("We know {} is {} because no rule assign it.", value.to_string().purple().bold(), "false".red()),
+                    Some(alias) => Translate::NoRule.print(lang, alias.red(), None),
+                    _ => Translate::NoRule.print(lang, value.to_string().purple().bold(), Some(var.value)),
                 }
             },
         }
     }
 }
 
-fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char) {
+fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char, lang: &Lang) {
     let formula = s.trim_start_matches('r').chars().fold((String::new(), false), |(mut acc, is_neg), c| {
         match c {
             '!' => {
@@ -78,15 +79,15 @@ fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char)
             }
         }
     }).0;
-    print!("We have{}. ", formula.blue().bold());
+    Translate::Rule.print(lang, formula.blue().bold(), None);
     let mut implies_bool = false;
-    let mut conjuction_word = "and";
+    let mut conjuction_word = Translate::And;
     for c in s.chars() {
         if c == '=' {
             implies_bool = true;
         }
         if c == '>' && implies_bool == true {
-            conjuction_word = "so"
+            conjuction_word = Translate::So;
         }
         if c != '=' {
             implies_bool = false;
@@ -100,14 +101,14 @@ fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char)
                 match var.value {
                     true => {
                         match &var.alias_true {
-                            Some(alias) => print!("{conjuction_word} {} ", alias.green()),
-                            _ => print!("{conjuction_word} {name} is {} ", "true".green()),
+                            Some(alias) => conjuction_word.print(lang, alias.green(), None),
+                            _ => conjuction_word.print(lang, name, Some(var.value)),
                         }
                     },
                     false => {
                         match &var.alias_false {
-                            Some(alias) => print!("{conjuction_word} {} ", alias.red()),
-                            _ => print!("{conjuction_word} {name} is {} ", "false".red()),
+                            Some(alias) => conjuction_word.print(lang, alias.red(), None),
+                            _ => conjuction_word.print(lang, name, Some(var.value)),
                         }
                     },
                 };
@@ -117,40 +118,40 @@ fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char)
     print!("\n");
 }
 
-fn print_already_know(mut s: String, variables: &HashMap<char, Variable>) {
+fn print_already_know(mut s: String, variables: &HashMap<char, Variable>, lang: &Lang) {
     let value: char = s.pop().unwrap();
     if let Some(var) = variables.get(&value) {
         match var.value {
             true => {
                 match &var.alias_true {
-                    Some(alias) => println!("We already know that {}", alias.green()),
-                    _ => println!("We already know that {} is {}", value.to_string().purple().bold(), "true".green()),
+                    Some(alias) => Translate::WeAlreadyKnow.print(lang, alias.green(), None),
+                    _ => Translate::WeAlreadyKnow.print(lang, value.to_string().purple().bold(),Some(var.value)),
                 }
             },
             false => {
                 match &var.alias_false {
-                    Some(alias) => println!("We already know that {}", alias.red()),
-                    _ => println!("We already know that {} is {}", value.to_string().purple().bold(), "false".red()),
+                    Some(alias) => Translate::WeAlreadyKnow.print(lang, alias.red(), None),
+                    _ => Translate::WeAlreadyKnow.print(lang, value.to_string().purple().bold(), Some(var.value)),
                 }
             },
         }
     }
 }
 
-pub fn print_history(history: String, variables: &HashMap<char, Variable>, query: char) {
+pub fn print_history(history: String, variables: &HashMap<char, Variable>, query: char, lang: &Lang) {
     let paths: Vec<&str> = history.split('%').collect();
     if let Some(var) = variables.get(&query) {
         match var.value {
             true => {
                 match &var.alias_true {
-                    Some(alias) => println!("we known {} because", alias.green()),
-                    _ => println!("we known {} is {} because", query.to_string().purple().bold(), "true".green()),
+                    Some(alias) => Translate::WeKnow.print(&lang, alias.green(), None),
+                    _ => Translate::WeKnow.print(&lang, query.to_string().purple().bold(), Some(var.value)),
                 }
             },
             false => {
                 match &var.alias_false {
-                    Some(alias) => println!("we known {} because", alias.red()),
-                    _ => println!("we known {} is {} because", query.to_string().purple().bold(), "false".red()),
+                    Some(alias) => Translate::WeKnow.print(&lang, alias.red(), None),
+                    _ => Translate::WeKnow.print(&lang, query.to_string().purple().bold(), Some(var.value)),
                 }
             },
         }
@@ -158,9 +159,9 @@ pub fn print_history(history: String, variables: &HashMap<char, Variable>, query
     for path in paths.iter() {
         if path.len() > 0 {
             match path.chars().next().unwrap() {
-                'r' => print_rules_path(path.to_string(), variables, query),
-                'n' => print_false_no_rule(path.to_string(), variables),
-                'i' => print_already_know(path.to_string(), variables),
+                'r' => print_rules_path(path.to_string(), variables, query, lang),
+                'n' => print_false_no_rule(path.to_string(), variables, lang),
+                'i' => print_already_know(path.to_string(), variables, lang),
                 _ => unreachable!()
             }
         }

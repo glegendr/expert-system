@@ -14,17 +14,19 @@ To start the project use:
  git clone https://github.com/glegendr/expert-system.git; cd expert-system; cargo run --release -- -i -t test_files/good/fritz_2.0.ru
 ```
 ## Flags
-|shot|long|description|
-|:-:|:-:|:-:|
-|-h|--help|print helper|
-|-i|--interactive|launch interactive mode|
-|-t|--trace|display algorithm's trace|
-|-v|--variables|display variables before running algorithm (no interactive)|
+|shot|long|arguments|description|
+|:-:|:-:|:-:|:-:|
+|-h|--help||print helper|
+|-i|--interactive||launch interactive mode|
+|-t|--trace||display algorithm's trace|
+|-v|--variables||display variables before running algorithm (no interactive)|
+|-l|--language|[en, fr, it]|change default language to chosen one|
 ## Interactive mode
 |command|argument|description|
 |:-:|:-:|:-:|
 |help|commands|display all commands or asked one|
 |quit||quit the program|
+|language|[en, fr, it]|change default language to chosen one|
 |trace||unable/disable algorithm's trace|
 |reset||clear the map and reload all providen files|
 |variables||list all variables and their rules|

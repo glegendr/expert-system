@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use crate::models::{Variable, Operator};
 use crate::utils::print_history;
+use crate::translate::Lang;
 
-pub fn algo_v1(variables: &mut HashMap<char, Variable>, trace: bool) {
+pub fn algo_v1(variables: &mut HashMap<char, Variable>, trace: bool, lang: &Lang) {
     let requested: Vec<char> = variables.iter().filter(|(_,v)| v.requested == true).map(|(k,_)| *k).collect();
     for c in requested {
         let history = String::new();
         match search_query(c, variables, &mut Vec::new(), history) {
             Ok((res, history)) => {
                 if trace == true {
-                    print_history(history, variables, c);
+                    print_history(history, variables, c, lang);
                 } else {
                     println!("{} is {}", c, res);
                 }

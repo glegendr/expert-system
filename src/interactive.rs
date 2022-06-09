@@ -9,9 +9,14 @@ use crate::models::{Variable, Rule};
 use crate::algo::{algo_v1, search_query};
 use crate::leakser::Flag;
 use crate::utils::print_history;
+use crate::translate::{Lang, Translate};
 
 pub fn interactive_mode(files: &Vec<String>, flags: &mut Vec<Flag>) {
     let mut variables: HashMap<char, Variable> = HashMap::new();
+    let mut lang = match flags.iter().find(|flag| match flag {Flag::Lang(_) => true, _ => false}).unwrap_or(&Flag::Lang(Lang::En)) {
+        Flag::Lang(l) => l,
+        _ => unreachable!()
+    }.clone();
     for file in files {
         let mut new_variables = variables.clone();
         if let Err(e) = fill_maps(&mut new_variables, file, true) {
@@ -86,10 +91,29 @@ pub fn interactive_mode(files: &Vec<String>, flags: &mut Vec<Flag>) {
                             let chunks: Vec<&str> = line.split(" ").filter(|c| c.len() > 0).collect();
                             if let Some(key_word) = chunks.get(0) {
                                 match key_word.to_lowercase().trim() {
+                                    "lang" | "language" => {
+                                        if let Some(language) = chunks.get(1) {
+                                            match language.to_lowercase().trim() {
+                                                "en" => lang = Lang::En,
+                                                "fr" => lang = Lang::Fr,
+                                                "it" => lang = Lang::It,
+                                                _ => {
+                                                    println!("{}", format!("{language} is not a valid language. try [En, Fr, It]").red());
+                                                    status = tick_or_cross(true);
+                                                    continue
+                                                },
+                                            }
+                                            println!("{}", format!("+ {language}").green());
+                                            status = tick_or_cross(true);
+                                        } else {
+                                            println!("{}","no language providen [En, Fr, It]".red());
+                                            status = tick_or_cross(false);
+                                        }
+                                    }
                                     "help" => {
                                         let mut iter_chunk = chunks.iter();
                                         iter_chunk.next();
-                                        status = tick_or_cross(helper(iter_chunk.collect()));
+                                        status = tick_or_cross(helper(&lang, iter_chunk.collect()));
                                     },
                                     "pwd" | "ls" => {
                                         let mut command = Command::new(key_word.to_lowercase().trim());
@@ -106,7 +130,7 @@ pub fn interactive_mode(files: &Vec<String>, flags: &mut Vec<Flag>) {
                                         let mut ret = true;
                                         iter_chunk.next();
                                         if iter_chunk.len() == 0 {
-                                            algo_v1(&mut variables, flags.contains(&Flag::Trace));
+                                            algo_v1(&mut variables, flags.contains(&Flag::Trace), &lang);
                                             status = tick_or_cross(true);
                                             continue
                                         }
@@ -122,7 +146,7 @@ pub fn interactive_mode(files: &Vec<String>, flags: &mut Vec<Flag>) {
                                             match search_query(var_name, &mut variables, &mut Vec::new(), String::default()) {
                                                 Ok((res, history)) => {
                                                     if flags.contains(&Flag::Trace) {
-                                                        print_history(history, &variables, var_name);
+                                                        print_history(history, &variables, var_name, &lang);
                                                     } else {
                                                         println!("{} is {}", var_name, res);
                                                     }
@@ -141,7 +165,7 @@ pub fn interactive_mode(files: &Vec<String>, flags: &mut Vec<Flag>) {
                                                 status = tick_or_cross(true);
                                             }
                                         } else {
-                                            println!("no file provided");
+                                            println!("{}", "no file provided".red());
                                             status = tick_or_cross(false);
                                         }
                                     }
@@ -314,41 +338,42 @@ fn remove_variable(var_name: Option<&&str>, variables: &mut HashMap<char, Variab
 }
 
 
-fn helper(commands: Vec<&&str>) -> bool {
+fn helper(lang: &Lang, commands: Vec<&&str>) -> bool {
     let mut ret = true;
     if commands.len() == 0 {
-        return helper(vec![&"help", &"quit", &"trace", &"reset", &"var", &"rule", &"clear", &"file", &"run", &"del", &"=", &"?", &"def", &"if"])
+        return helper(lang, vec![&"help", &"quit", &"language", &"trace", &"reset", &"var", &"rule", &"clear", &"file", &"run", &"del", &"=", &"?", &"def", &"if"])
     }
     for (i, command) in commands.into_iter().enumerate() {
         if i > 0 {
             println!("");
         }
         match *command {
-            "help" => println!("help <?Command ...>\n - display all commands or asked one"),
-            "trace" => println!("trace\n - unable/disable algorithm's trace"),
-            "reset" => println!("reset\n - clear the map and reload all providen files"),
-            "quit" => println!("quit\n - quit the program"),
-            "variables" | "var" => println!("variables / var\n - list all variables and their rules"),
-            "rules" | "rule" => println!("rules / rule\n - list all rules"),
-            "clear" => println!("clear\n - alias for \"remove all\""),
-            "file" => println!("file <Path>\n - read the file in path and enrich variables and rules"),
-            "exec" | "run" | "execute" => println!("run <?Variable ...>\n - run the algorithm with variable if providen"),
+            "help" => Translate::Help.print(lang, format!("{} {}", "help".blue().bold(), "<?Command ...>".purple().dimmed()), None),//display all commands or asked one"),
+            "lang" | "language" => Translate::HelpLanguage.print(lang, format!("{} {}", "help".blue().bold(), "[en, fr, it]".purple()), None),
+            "trace" =>Translate::HelpTrace.print(lang, "trace".blue().bold(), None), //\n - unable/disable algorithm's trace"),
+            "reset" =>Translate::HelpReset.print(lang, "reset".blue().bold(), None), //\n - clear the map and reload all providen files"),
+            "quit" =>Translate::HelpQuit.print(lang, "quit".blue().bold(), None), //\n - quit the program"),
+            "variables" | "var" =>Translate::HelpVariables.print(lang, "variables".blue().bold(), None), //\n - list all variables and their rules"),
+            "rules" | "rule" =>Translate::HelpRules.print(lang, "rules".blue().bold(), None), //\n - list all rules"),
+            "clear" =>Translate::HelpClear.print(lang, "clear".blue().bold(), None), //\n - alias for \"remove all\""),
+            "file" =>Translate::HelpFile.print(lang, format!("{} {}", "file".blue().bold(), "<Path>".purple()), None), //\n - read the file in path and enrich variables and rules"),
+            "exec" | "run" | "execute" =>Translate::HelpRun.print(lang, format!("{} {}", "run".blue().bold(), "<?Variable ...>".purple().dimmed()), None), //\n - run the algorithm with variable if providen"),
             "remove" | "del" | "delete" => {
-                println!("remove all\n - clear all variables and rules");
-                println!("remove var <Variable>\n - remove the variable and all rules implicated");
-                println!("remove rule <Index>\n - remove the rule depending the index listed with \"rules\"");
-                println!("remove ? <?Variable ...>\n - remove the variable from requested one");
-                println!("remove = <?Variable ...>\n - remove the variable from seted one");
+               Translate::HelpRemoveAll.print(lang, "remove all".blue().bold(), None); //\n - clear all variables and rules");
+               Translate::HelpRemoveVar.print(lang, format!("{} {}", "remove var".blue().bold(), " <Variable>".purple()), None); //\n - remove the variable and all rules implicated");
+               Translate::HelpRemoveRule.print(lang, format!("{} {}", "remove rule".blue().bold(), " <Index>".purple()), None); //\n - remove the rule depending the index listed with \"rules\"");
+               Translate::HelpRemoveRequest.print(lang, format!("{} {}", "remove ?".blue().bold(), " <?Variable ...>".purple().dimmed()), None); //\n - remove the variable from requested one");
+               Translate::HelpRemoveSet.print(lang, format!("{} {}", "remove =".blue().bold(), " <?Variable ...>".purple().dimmed()), None); //\n - remove the variable from seted one");
             },
-            "=" => println!("= <Variable ...>\n - set the variable(s) to true"),
-            "?" => println!("? <Variable ...>\n - set the variable(s) to requested"),
-            "def" => println!("def <Variable> <?alias true> <?alias false>\n - create a new variable with name \"Variable\""),
-            "if" => println!("if <Rule>\n - create a new rule"),
+            "=" =>Translate::HelpSet.print(lang, format!("{} {}", "=".blue().bold(), "<Variable ...>".purple()), None), //\n - set the variable(s) to true"),
+            "?" =>Translate::HelpRequest.print(lang, format!("{} {}", "?".blue().bold(), "<Variable ...>".purple()), None), //\n - set the variable(s) to requested"),
+            "def" =>Translate::HelpDef.print(lang, format!("{} {} {}", "def".blue().bold(), "<Variable>".purple(), "<?alias true> <?alias false>".purple().dimmed()), None), //\n - create a new variable with name \"Variable\""),
+            "if" =>Translate::HelpIf.print(lang, String::from(format!("{} {}", "if".blue().bold(), "<Rule>".purple())), None), //\n - create a new rule"),
             "ls" | "pwd" => {
                 Command::new("man").arg(command).status().expect("failed to execute process");
             }
             _ => {
-                println!("unknown command {command}");
+               Translate::UnknownCommand.print(lang, format!("{command}").red(), None); //");
                 ret = false;
             }
         }
