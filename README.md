@@ -42,7 +42,7 @@ To start the project use:
 |def|variable ?alias_true ?alias_false|create a new variable with name "variable"|
 |if|rule|create a new rule|
 ## Exemple
-Here is an example with algorithm's trace
+Here is an example with algorithm's trace    
 ![](screen.png)
 ## Authors
   <td align="center">
