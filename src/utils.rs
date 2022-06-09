@@ -37,7 +37,7 @@ pub fn print_rules(variables: &HashMap<char, Variable>)  {
     }
 }
 
-fn print_false_no_rule(mut s: String, query: char, variables: &HashMap<char, Variable>) {
+fn print_false_no_rule(mut s: String, variables: &HashMap<char, Variable>) {
     let value: char = s.pop().unwrap();
     if let Some(var) = variables.get(&value) {
         match var.value {
@@ -117,7 +117,7 @@ fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char)
     print!("\n");
 }
 
-fn print_already_know(mut s: String, query: char, variables: &HashMap<char, Variable>) {
+fn print_already_know(mut s: String, variables: &HashMap<char, Variable>) {
     let value: char = s.pop().unwrap();
     if let Some(var) = variables.get(&value) {
         match var.value {
@@ -159,8 +159,8 @@ pub fn print_history(history: String, variables: &HashMap<char, Variable>, query
         if path.len() > 0 {
             match path.chars().next().unwrap() {
                 'r' => print_rules_path(path.to_string(), variables, query),
-                'n' => print_false_no_rule(path.to_string(), query, variables),
-                'i' => print_already_know(path.to_string(), query, variables),
+                'n' => print_false_no_rule(path.to_string(), variables),
+                'i' => print_already_know(path.to_string(), variables),
                 _ => unreachable!()
             }
         }
