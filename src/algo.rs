@@ -1,9 +1,80 @@
 use std::collections::HashMap;
 use crate::models::{Variable, Operator};
+use colored::Colorize;
 
-pub fn print_history(history: String) {
+fn print_false_no_rule(mut s: String, query: char) {
+    let value: char = s.pop().unwrap();
+    if value == query {
+        println!("We know {} is {} because no rule assign it.", value.to_string().purple().bold(), "false".red());
+    } else {
+        println!("We know {} is {} because no rule assign it.", value.to_string().yellow().bold(), "false".red());
+    }
+}
+
+fn print_rules_path(s: String, variables: &mut HashMap<char, Variable>, query: char) {
+    print!("We have{}. ", s.trim_start_matches('r').blue().bold());
+    let mut implies_bool = false;
+    let mut conjuction_word = "and";
+    for c in s.chars() {
+        if c == '=' {
+            implies_bool = true;
+        }
+        if c == '>' && implies_bool == true {
+            conjuction_word = "so"
+        }
+        if c != '=' {
+            implies_bool = false;
+        }
+        if c.is_alphabetic() == true {
+            if let Some(var) = variables.get(&c) {
+                if var.value == true {
+                    if c == query {
+                        print!("{} we know {} is {} ", conjuction_word, c.to_string().purple().bold(), var.value.to_string().green());
+                    } else {
+                        print!("{} we know {} is {} ", conjuction_word, c.to_string().yellow().bold(), var.value.to_string().green());
+                    }
+                } else {
+                    if c == query {
+                        print!("{} we know {} is {} ", conjuction_word, c.to_string().purple().bold(), var.value.to_string().red());
+                    } else {
+                        print!("{} we know {} is {} ", conjuction_word, c.to_string().yellow().bold(), var.value.to_string().red());
+                    }
+                }
+            }
+        }
+    }
+    print!("\n");
+}
+
+fn print_already_know(mut s: String, query: char) {
+    let value: char = s.pop().unwrap();
+    if value == query {
+        println!("We already know that {} is {}.", value.to_string().purple().bold(), "true".green());
+    } else {
+        println!("We already know that {} is {}.", value.to_string().yellow().bold(), "true".green());
+    }
+}
+
+pub fn print_history(history: String, variables: &mut HashMap<char, Variable>, query: char) {
     let paths: Vec<&str> = history.split('%').collect();
-    println!("{:?}", paths);
+    if let Some(var) = variables.get(&query) {
+        if var.value == true {
+            println!("we know {} is {} because", query.to_string().purple().bold(), var.value.to_string().green());
+        } else {
+            println!("we know {} is {} because", query.to_string().purple().bold(), var.value.to_string().red());
+        }
+    }
+    //println!("BITE {:?}", paths);
+    for path in paths.iter() {
+        if path.len() > 0 {
+            match path.chars().next().unwrap() {
+                'r' => print_rules_path(path.to_string(), variables, query),
+                'n' => print_false_no_rule(path.to_string(), query),
+                'i' => print_already_know(path.to_string(), query),
+                _ => unreachable!()
+            }
+        }
+    }
 }
 
 pub fn algo_v1(variables: &mut HashMap<char, Variable>) {
@@ -12,9 +83,11 @@ pub fn algo_v1(variables: &mut HashMap<char, Variable>) {
         let history = String::new();
         match search_query(c, variables, &mut Vec::new(), history) {
             Ok((res, history)) => {
-                println!("{} is {}", c, res);
-                println!("UI {}", history);
-                print_history(history);
+                if trace == true {
+                    print_history(history, variables, c);
+                } else {
+                    println!("{} is {}", c, res);
+                }
             },
             Err(e) => println!("{} => {}", c, e)
         }
@@ -133,5 +206,7 @@ pub fn search_query(query: char, variables: &mut HashMap<char, Variable>, old_ru
         x.value = false;
         //x.locked = false;
     }
+    history.push_str("%r");
+    history.push_str(&query_rules[i - 1].formula_string.clone());
     Ok((false, history))
 }

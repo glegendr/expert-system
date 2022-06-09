@@ -4,7 +4,8 @@ use crate::utils::string_to_char;
 #[derive(PartialEq)]
 pub enum Flag {
     Help,
-    Interactive
+    Interactive,
+    Trace
 }
 
 impl Flag {
@@ -12,6 +13,7 @@ impl Flag {
         Ok(match string {
             "-h" | "--help" => Flag::Help,
             "-i" | "--interactive" => Flag::Interactive,
+            "-t" | "--trace" => Flag::Trace,
             _ => Err(format!("{string} is an undefined flag"))?
         })
     }
