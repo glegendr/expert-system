@@ -266,6 +266,29 @@ impl BTree {
         ret
     }
 
+    pub fn enrich_bool(&self, variables: &HashMap<char, bool>) -> BTree {
+        match &self.node {
+            Operator::Var(c) => {
+                if let Some(var) = variables.get(c) {
+                    BTree::new(Operator::B(*var))    
+                } else {
+                    BTree::new(Operator::B(false))
+                }
+            },
+            Operator::B(c) => BTree::new(Operator::B(*c)),
+            _ => {
+                let mut ret = BTree::new(self.node.clone());
+                if let Some(c1) = &self.c1 {
+                    ret.c1 = Some(Box::new(c1.enrich_bool(variables)));
+                }
+                if let Some(c2) = &self.c2 {
+                    ret.c2 = Some(Box::new(c2.enrich_bool(variables)));
+                }
+                ret
+            }
+        }
+    }
+
     pub fn enrich(&self, variables: &HashMap<char, Variable>) -> BTree {
         match &self.node {
             Operator::Var(c) => {

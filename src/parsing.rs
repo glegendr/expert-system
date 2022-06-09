@@ -35,32 +35,20 @@ const RESERVED_WORDS: [&'static str; 22] = [
 fn rule_to_truth_table(rule: &Rule) -> Vec<HashMap<char, bool>> {
     let vars = rule.input.find_nodes(|n| match n {Operator::Var(_) => true, _ => false});
     let permutations: Vec<u32> = (0..=u32::MAX >> (32 - vars.len())).collect();
-    let mut ret: Vec<HashMap<char, Variable>> = Vec::new();
+    let mut ret: Vec<HashMap<char, bool>> = Vec::new();
     for permutation in permutations {
         let mut variables = HashMap::new();
         for (i, var) in vars.iter().enumerate() {
             match var {
-                Operator::Var(v) => {
-                    variables.insert(*v, Variable {
-                        value: (permutation >> i) & 1 == 1,
-                        locked: false,
-                        requested: false,
-                        rules: Vec::new(),
-                        alias_true: None,
-                        alias_false: None,
-                    });
-                },
+                Operator::Var(v) => drop(variables.insert(*v, (permutation >> i) & 1 == 1)),
                 _ => ()
             }
         }
-        if rule.input.enrich(&variables).eval() {
+        if rule.input.enrich_bool(&variables).eval() {
             ret.push(variables);
         }
     }
-    ret.iter().map(|map| map.iter().fold(HashMap::new(), |mut acc, (k, v)| {
-        acc.insert(*k, v.value);
-        acc
-    })).collect()
+    ret
 }
 
 fn check_loop_2(variables: &HashMap<char, Variable>, mut history: Vec<(char, Vec<HashMap<char, bool>>)>) -> Vec<(char, Vec<HashMap<char, bool>>)> {
@@ -95,26 +83,21 @@ fn check_loop(variables: &HashMap<char, Variable>, rule: &Rule) -> Result<(), St
             Operator::Var(k) => {
                 let mut map: HashMap<char, HashMap<char, bool>> = HashMap::new();
                 let ret_loop = check_loop_2(&variables, vec![(k, rule_to_truth_table(rule))]);
-                for (k, v) in ret_loop {
-                    for v2 in v {
-                        for v3 in &v2 {
-                            if let Some(x) = map.get_mut(&k) {
-                                x.insert(*v3.0, *v3.1);
-                            } else {
-                                map.insert(k, v2.clone());
-                            }
-                        }
-                    }
-                }
-                for (k_1, map_1) in &map {
-                    for (k_2, _) in map_1 {
-                        if let Some(diff_1) = map.get(k_1).unwrap().get(k_2) {
-                            if let Some(diff_2_1) = map.get(k_2) {
-                                if let Some(diff_2_2) = diff_2_1.get(k_1) {
-                                    if diff_1 != diff_2_2 {
-                                        Err(format!("contradiction in rule{rule}"))?
+                for (output_letter, hashmap_vec) in &ret_loop {
+                    for hashmap in hashmap_vec {
+                        for input_letter in hashmap {
+                            if let Some(x) = map.get_mut(&output_letter) {
+                                if let Some(z) = x.insert(*input_letter.0, *input_letter.1) {
+                                    if z != *input_letter.1 {
+                                        if let Some((_, error_vec)) = ret_loop.iter().find(|(l_output_letter, _)| l_output_letter == input_letter.0) {
+                                            if let Some(_) = error_vec.iter().find(|loop_map| loop_map.get(&output_letter).is_some()) {
+                                                Err(format!("contradiction in rule{rule}"))?
+                                            }
+                                        }
                                     }
                                 }
+                            } else {
+                                map.insert(*output_letter, hashmap.clone());
                             }
                         }
                     }
@@ -202,8 +185,8 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silenc
                 if chunk.len() != 1 {
                     Err(format!("{chunk} is not a valid variable name"))?
                 } else if let Some(name) = chunk.chars().next() {
-                    match name {
-                        'A'..='Z' | 'a'..='z' => var_name = chunk.clone(),
+                    match name.is_alphabetic() {
+                        true => var_name = chunk.clone(),
                         _ => Err(format!("{chunk} is not a valid variable name"))?
                     }
                 }
@@ -213,6 +196,8 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silenc
                     Err(format!("{chunk} is a reserved word"))?
                 } else if let Some((k, _)) = variables.iter().find(|(k, v)| k.to_string() != var_name && (v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk)) {
                     Err(format!("{chunk} is already an alias for {k}"))?
+                } else if chunk.len() < 2 {
+                    Err(format!("{chunk} is too short to be an alias"))?
                 }
                 var.alias_true = Some(String::from(chunk))
             },
@@ -221,13 +206,17 @@ fn def_var(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silenc
                     Err(format!("{chunk} is a reserved word"))?
                 } else if let Some((k, _)) = variables.iter().find(|(k, v)| k.to_string() != var_name && (v.alias_true.clone().unwrap_or_default() == *chunk || v.alias_false.clone().unwrap_or_default() == *chunk)) {
                     Err(format!("{chunk} is already an alias for {k}"))?
+                } else if var.alias_true == Some(String::from(chunk)) {
+                    Err(format!("{chunk} is already the true alias"))?
+                } else if chunk.len() < 2 {
+                    Err(format!("{chunk} is too short to be an alias"))?
                 }
                 var.alias_false = Some(String::from(chunk))
             },
             _ => Err(format!("unexpected {chunk} in def line"))?
         }
     }
-    if let Some(variable) = variables.get_mut(&string_to_char(&var_name)) {
+    if let Some((_, variable)) = variables.iter_mut().find(|(k, _)| k.to_string() == var_name) {
         if !silence {
             println!("{}", format!("- {var_name} => {variable}").red());
         }
@@ -268,10 +257,15 @@ fn user_set(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silen
                     var.value = true;
                     var.locked = true;
                 } else {
-                    if !silence {
-                        println!("{}", format!("+= {c}").green());
+                    match c.is_alphabetic() {
+                        true => {
+                            if !silence {
+                                println!("{}", format!("+= {c}").green());
+                            }
+                            variables.insert(c, Variable::insert());
+                        },
+                        _ => Err(format!("{c} is an invalid variable name"))?
                     }
-                    variables.insert(c, Variable::insert());
                 }
             }
         }
@@ -315,12 +309,39 @@ fn check_splited(splited: &Vec<Vec<Operator>>) -> Result<(), String> {
     Ok(())
 }
 
+fn insert_rule(rule: &Rule, variables: &mut HashMap<char, Variable>, silence: bool) -> Result<(), String> {
+    if rule.output.find_nodes(|n| match n {Operator::Var(_) | Operator::And => false, _ => true}).len() > 0 {
+        Err("output can only handle & and variables")?
+    }
+    let outuput_var = rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false});
+    let input_var = rule.input.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false});
+    for var in input_var {
+        if outuput_var.contains(&var) {
+            Err(format!("{var} is both in input and output"))?
+        }
+    }
+    if !silence {
+        println!("{}", format!("+{rule}").green());
+    }
+    for var in outuput_var {
+        if let Operator::Var(v) = var {
+            if let Some(var) = variables.get_mut(&v) {
+                if !var.rules.iter().any(|ru| ru.formula_string == rule.formula_string) {
+                    var.rules.push(rule.clone());
+                }
+            }
+        }
+    }
+    check_loop(&variables, rule)?;
+    Ok(())
+}
+
 fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silence: bool) -> Result<(), String> {
     let mut aritmetic: Vec<Operator> = Vec::new();
     for chunk in chunks.iter() {
         if let Some(operator) = Operator::from_str(chunk) {
             aritmetic.push(operator);
-        } else if let Some(_) = variables.get(&string_to_char(chunk)) {
+        } else if let Some(_) = variables.iter().find(|(k, _)| k.to_string() == *chunk) {
             aritmetic.push(Operator::Var(string_to_char(chunk)));
         } else if let Some((k, _)) = variables.iter().find(|(_, v)| v.alias_true.clone().unwrap_or_default() == *chunk) {
             aritmetic.push(Operator::Var(*k));
@@ -328,8 +349,8 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, sile
             aritmetic.push(Operator::Not);
             aritmetic.push(Operator::Var(*k));
         } else if chunk.len() == 1 {
-            match chunk.chars().next().unwrap() {
-                'a'..='z' | 'A'..='Z' => {
+            match chunk.chars().next().unwrap().is_alphabetic() {
+                true => {
                     variables.insert(string_to_char(chunk), Variable::default());
                     if !silence {
                         println!("{}", format!("+ {}", string_to_char(chunk)).green());
@@ -355,47 +376,14 @@ fn def_rules(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, sile
         output: BTree::from_vec(&mut Operator::to_reverse_polish_notation(splited.get(1).unwrap_or(&Vec::new()))?)?,
         formula_string: aritmetic_to_string(&splited, false)
     };
-    if rule.output.find_nodes(|n| match n {Operator::Var(_) | Operator::And => false, _ => true}).len() > 0 {
-        Err("output can only handle & and variables")?
-    }
-    let outuput_var = rule.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false});
-    let input_var = rule.input.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false});
-    for var in input_var {
-        if outuput_var.contains(&var) {
-            Err(format!("{var} is both in input and output"))?
-        }
-    }
-    if !silence {
-        println!("{}", format!("+{rule}").green());
-    }
-    for var in outuput_var {
-        if let Operator::Var(v) = var {
-            if let Some(var) = variables.get_mut(&v) {
-                var.rules.push(rule.clone());
-            }
-        }
-    }
-    check_loop(&variables, &rule)?;
+    insert_rule(&rule, variables, silence)?;
     if let Some(Operator::IfAndOnlyIf) = aritmetic.iter().find(|ope| *ope == &Operator::IfAndOnlyIf) {
         let rule_2 = Rule {
             input: rule.output.clone(),
             output: rule.input.clone(),
             formula_string: aritmetic_to_string(&splited, true)
         };
-        if rule_2.output.find_nodes(|n| match n {Operator::Var(_) | Operator::And => false, _ => true}).len() > 0 {
-            Err("output can only handle & and variables")?
-        }
-        if !silence {
-            println!("{}", format!("+{rule_2}").green());
-        }
-        for var in rule_2.output.find_nodes(|ope| match ope {Operator::Var(_) => true, _ => false}) {
-            if let Operator::Var(v) = var {
-                if let Some(var) = variables.get_mut(&v) {
-                    var.rules.push(rule_2.clone());
-                }
-            }
-        }
-        check_loop(&variables, &rule_2)?;
+        insert_rule(&rule_2, variables, silence)?;
     }
     Ok(())
 }
@@ -417,8 +405,8 @@ fn requests(chunks: &Vec<String>, variables: &mut HashMap<char, Variable>, silen
                     }
                     var.requested = true;
                 } else {
-                    match c {
-                        'A'..='Z' | 'a'..='z' => {
+                    match c.is_alphabetic() {
+                        true => {
                             variables.insert(c, Variable::request());
                             if !silence {
                                 println!("{}", format!("+? {c}").green());
