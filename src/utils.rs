@@ -37,17 +37,48 @@ pub fn print_rules(variables: &HashMap<char, Variable>)  {
     }
 }
 
-fn print_false_no_rule(mut s: String, query: char) {
+fn print_false_no_rule(mut s: String, query: char, variables: &HashMap<char, Variable>) {
     let value: char = s.pop().unwrap();
-    if value == query {
-        println!("We know {} is {} because no rule assign it.", value.to_string().purple().bold(), "false".red());
-    } else {
-        println!("We know {} is {} because no rule assign it.", value.to_string().yellow().bold(), "false".red());
+    if let Some(var) = variables.get(&value) {
+        match var.value {
+            true => {
+                match &var.alias_true {
+                    Some(alias) => println!("We know {} because no rule assign it.", alias.green()),
+                    _ => println!("We know {} is {} because no rule assign it.", value.to_string().purple().bold(), "true".green()),
+                }
+            },
+            false => {
+                match &var.alias_false {
+                    Some(alias) => println!("We know {} because no rule assign it.", alias.red()),
+                    _ => println!("We know {} is {} because no rule assign it.", value.to_string().purple().bold(), "false".red()),
+                }
+            },
+        }
     }
 }
 
 fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char) {
-    print!("We have{}. ", s.trim_start_matches('r').blue().bold());
+    let formula = s.trim_start_matches('r').chars().fold((String::new(), false), |(mut acc, is_neg), c| {
+        match c {
+            '!' => {
+                acc.pop();
+                return (acc, true)
+            },
+            _ => {
+                if c.is_alphabetic() {
+                    if let Some(var) = variables.get(&c) {
+                        let name = match is_neg {
+                            true => var.alias_false.clone().unwrap_or(format!("!{c}")),
+                            false => var.alias_true.clone().unwrap_or(c.to_string()),
+                        };
+                        return (format!("{acc}{name}"), false);
+                    }
+                }
+                return (format!("{acc}{c}"), is_neg);
+            }
+        }
+    }).0;
+    print!("We have{}. ", formula.blue().bold());
     let mut implies_bool = false;
     let mut conjuction_word = "and";
     for c in s.chars() {
@@ -62,45 +93,74 @@ fn print_rules_path(s: String, variables: &HashMap<char, Variable>, query: char)
         }
         if c.is_alphabetic() == true {
             if let Some(var) = variables.get(&c) {
-                let value = match var.value {
-                    true => var.value.to_string().green(),
-                    _ => var.value.to_string().red()
-                };
                 let name = match c == query {
                     true => c.to_string().purple().bold(),
                     false => c.to_string().yellow().bold()
                 };
-                print!("{conjuction_word} we known {name} is {value} ");
+                match var.value {
+                    true => {
+                        match &var.alias_true {
+                            Some(alias) => print!("{conjuction_word} {} ", alias.green()),
+                            _ => print!("{conjuction_word} {name} is {} ", "true".green()),
+                        }
+                    },
+                    false => {
+                        match &var.alias_false {
+                            Some(alias) => print!("{conjuction_word} {} ", alias.red()),
+                            _ => print!("{conjuction_word} {name} is {} ", "false".red()),
+                        }
+                    },
+                };
             }
         }
     }
     print!("\n");
 }
 
-fn print_already_know(mut s: String, query: char) {
+fn print_already_know(mut s: String, query: char, variables: &HashMap<char, Variable>) {
     let value: char = s.pop().unwrap();
-    if value == query {
-        println!("We already know that {} is {}.", value.to_string().purple().bold(), "true".green());
-    } else {
-        println!("We already know that {} is {}.", value.to_string().yellow().bold(), "true".green());
+    if let Some(var) = variables.get(&value) {
+        match var.value {
+            true => {
+                match &var.alias_true {
+                    Some(alias) => println!("We already know that {}", alias.green()),
+                    _ => println!("We already know that {} is {}", value.to_string().purple().bold(), "true".green()),
+                }
+            },
+            false => {
+                match &var.alias_false {
+                    Some(alias) => println!("We already know that {}", alias.red()),
+                    _ => println!("We already know that {} is {}", value.to_string().purple().bold(), "false".red()),
+                }
+            },
+        }
     }
 }
 
 pub fn print_history(history: String, variables: &HashMap<char, Variable>, query: char) {
     let paths: Vec<&str> = history.split('%').collect();
     if let Some(var) = variables.get(&query) {
-        if var.value == true {
-            println!("we know {} is {} because", query.to_string().purple().bold(), var.value.to_string().green());
-        } else {
-            println!("we know {} is {} because", query.to_string().purple().bold(), var.value.to_string().red());
+        match var.value {
+            true => {
+                match &var.alias_true {
+                    Some(alias) => println!("we known {} because", alias.green()),
+                    _ => println!("we known {} is {} because", query.to_string().purple().bold(), "true".green()),
+                }
+            },
+            false => {
+                match &var.alias_false {
+                    Some(alias) => println!("we known {} because", alias.red()),
+                    _ => println!("we known {} is {} because", query.to_string().purple().bold(), "false".red()),
+                }
+            },
         }
     }
     for path in paths.iter() {
         if path.len() > 0 {
             match path.chars().next().unwrap() {
                 'r' => print_rules_path(path.to_string(), variables, query),
-                'n' => print_false_no_rule(path.to_string(), query),
-                'i' => print_already_know(path.to_string(), query),
+                'n' => print_false_no_rule(path.to_string(), query, variables),
+                'i' => print_already_know(path.to_string(), query, variables),
                 _ => unreachable!()
             }
         }
