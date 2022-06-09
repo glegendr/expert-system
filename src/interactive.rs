@@ -317,7 +317,7 @@ fn remove_variable(var_name: Option<&&str>, variables: &mut HashMap<char, Variab
 fn helper(commands: Vec<&&str>) -> bool {
     let mut ret = true;
     if commands.len() == 0 {
-        return helper(vec![&"help", &"trace", &"quit", &"var", &"rule", &"clear", &"file", &"run", &"del", &"=", &"?", &"def", &"if"])
+        return helper(vec![&"help", &"quit", &"trace", &"reset", &"var", &"rule", &"clear", &"file", &"run", &"del", &"=", &"?", &"def", &"if"])
     }
     for (i, command) in commands.into_iter().enumerate() {
         if i > 0 {
@@ -326,6 +326,7 @@ fn helper(commands: Vec<&&str>) -> bool {
         match *command {
             "help" => println!("help <?Command ...>\n - display all commands or asked one"),
             "trace" => println!("trace\n - unable/disable algorithm's trace"),
+            "reset" => println!("reset\n - clear the map and reload all providen files"),
             "quit" => println!("quit\n - quit the program"),
             "variables" | "var" => println!("variables / var\n - list all variables and their rules"),
             "rules" | "rule" => println!("rules / rule\n - list all rules"),
